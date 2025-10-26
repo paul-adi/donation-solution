@@ -1,0 +1,25 @@
+# Compiler files
+cache/
+out/
+broadcast/
+
+# Dependencies
+lib/
+node_modules/
+.deps/
+
+# Environment files
+.env
+.env.local
+
+# OS / Editor junk
+.DS_Store
+Thumbs.db
+*.log
+.idea/
+.vscode/
+*.iml
+
+# Coverage & test reports
+coverage/
+lcov-report/
