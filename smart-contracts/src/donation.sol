@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {IERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {Ownable} from "../lib/openzeppelin-contracts/contracts/access/Ownable.sol";
-import {IPythOracle} from "./interfaces/IPythOracle.sol";
 import {Pausable} from "../lib/openzeppelin-contracts/contracts/utils/Pausable.sol";
 import {ReentrancyGuard} from "../lib/openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
 
@@ -41,7 +39,6 @@ contract Donation is Ownable, Pausable, ReentrancyGuard {
         uint256 startDate;
         uint256 endDate;
         bool isComplete;
-        uint256 withdrawAmount;
         uint256 withdrawnTotal;
     }
 
@@ -54,40 +51,12 @@ contract Donation is Ownable, Pausable, ReentrancyGuard {
     mapping(address => Donor) public donors;
     address[] public donorList;
 
-    // Events
-    event CampaignCreated(
-        uint256 indexed campaignId,
-        address indexed creator,
-        string title,
-        uint256 goal,
-        uint256 startDate,
-        uint256 endDate
-    );
+    // Tracking donors per campaign
+    mapping(uint256 => address[]) public campaignDonors;
+    mapping(uint256 => mapping(address => bool)) private isDonorInCampaign;
+    mapping(uint256 => mapping(address => uint256)) public donationsPerCampaign;
 
-    event DonationReceived(
-        uint256 indexed campaignId,
-        address indexed donor,
-        uint256 amount,
-        uint256 fee,
-        uint256 netAmount
-    );
-
-    event Withdrawn(
-        uint256 indexed campaignId,
-        address indexed creator,
-        uint256 amount
-    );
-
-    event PlatformFeesWithdrawn(
-        address indexed to,
-        uint256 amount
-    );
-
-    event CampaignStatusChanged(
-        uint256 indexed campaignId,
-        bool isActive
-    );
-
+    // Modifiers
     modifier onlyCreator(uint256 _campaignId) {
         if (_campaignId >= campaigns.length) revert InvalidID();
         if (campaigns[_campaignId].creator != msg.sender) revert NotCreator();
@@ -99,8 +68,16 @@ contract Donation is Ownable, Pausable, ReentrancyGuard {
         _;
     }
 
+    // Events
+    event CampaignCreated(uint256 indexed campaignId, address indexed creator, string title, uint256 goal, uint256 startDate, uint256 endDate);
+    event Donated(uint256 indexed campaignId, address indexed donor, uint256 amount, string donorName);
+    event Withdrawn(uint256 indexed campaignId, address indexed creator, uint256 amount);
+    event PlatformFeesWithdrawn(address indexed to, uint256 amount);
+    event CampaignStatusChanged(uint256 indexed campaignId, bool isActive);
+
     constructor() Ownable(msg.sender) Pausable() {}
 
+    // Create campaign
     function createCampaign(
         string memory _title,
         string memory _description,
@@ -129,29 +106,14 @@ contract Donation is Ownable, Pausable, ReentrancyGuard {
             startDate: _startDate,
             endDate: _endDate,
             isComplete: false,
-            withdrawAmount: 0,
             withdrawnTotal: 0
         });
 
         campaigns.push(newC);
-        uint256 id = campaigns.length - 1;
-
-        emit CampaignCreated(id, msg.sender, _title, _goal, _startDate, _endDate);
+        emit CampaignCreated(campaigns.length - 1, msg.sender, _title, _goal, _startDate, _endDate);
     }
 
-    function getAllCampaigns() external view returns (Campaign[] memory) {
-        return campaigns;
-    }
-
-    function getAllDonors() external view returns (Donor[] memory) {
-        uint256 length = donorList.length;
-        Donor[] memory list = new Donor[](length);
-        for (uint256 i = 0; i < length; i++) {
-            list[i] = donors[donorList[i]];
-        }
-        return list;
-    }
-
+    // Donate to a campaign
     function donate(
         uint256 _campaignId,
         string memory _donorName,
@@ -166,27 +128,32 @@ contract Donation is Ownable, Pausable, ReentrancyGuard {
 
         uint256 fee = (_donatedAmount * PLATFORM_FEE_BPS) / 10000;
         uint256 netAmount = _donatedAmount - fee;
-
         totalPlatformFees += fee;
 
         camp.raised += netAmount;
-        camp.withdrawAmount = camp.raised;
 
         if (camp.raised >= camp.goal || block.timestamp > camp.endDate) {
             camp.isComplete = true;
         }
 
+        // Update global donor data
         if (donors[msg.sender].totalDonated == 0) {
             donorList.push(msg.sender);
             donors[msg.sender].name = _donorName;
-            donors[msg.sender].totalDonated = _donatedAmount;
-        } else {
-            donors[msg.sender].totalDonated += _donatedAmount;
         }
+        donors[msg.sender].totalDonated += _donatedAmount;
 
-        emit DonationReceived(_campaignId, msg.sender, _donatedAmount, fee, netAmount);
+        // Update campaign-specific donor data
+        if (!isDonorInCampaign[_campaignId][msg.sender]) {
+            campaignDonors[_campaignId].push(msg.sender);
+            isDonorInCampaign[_campaignId][msg.sender] = true;
+        }
+        donationsPerCampaign[_campaignId][msg.sender] += _donatedAmount;
+
+        emit Donated(_campaignId, msg.sender, _donatedAmount, _donorName);
     }
 
+    // Withdraw 25% of raised amount
     function withdraw(uint256 _campaignId, uint256 _amount)
         external
         onlyCreator(_campaignId)
@@ -197,7 +164,7 @@ contract Donation is Ownable, Pausable, ReentrancyGuard {
         if (!c.isComplete) revert CampaignNotComplete();
         if (_amount == 0) revert InvalidAmount();
 
-        uint256 maxWithdrawAllowed = (c.withdrawAmount * 25) / 100;
+        uint256 maxWithdrawAllowed = (c.raised * 25) / 100;
         if (c.withdrawnTotal + _amount > maxWithdrawAllowed) revert WithdrawLimitExceeded();
 
         c.withdrawnTotal += _amount;
@@ -206,6 +173,7 @@ contract Donation is Ownable, Pausable, ReentrancyGuard {
         emit Withdrawn(_campaignId, msg.sender, _amount);
     }
 
+    // Withdraw platform fees
     function withdrawPlatformFees(address payable _to)
         external
         onlyOwner
@@ -221,13 +189,13 @@ contract Donation is Ownable, Pausable, ReentrancyGuard {
         emit PlatformFeesWithdrawn(_to, amount);
     }
 
+    // Change campaign status
     function setCampaignStatus(uint256 _campaignId, bool isActive)
         external
         onlyOwner
     {
         if (_campaignId >= campaigns.length) revert InvalidID();
         campaigns[_campaignId].active = isActive;
-
         emit CampaignStatusChanged(_campaignId, isActive);
     }
 
@@ -237,5 +205,78 @@ contract Donation is Ownable, Pausable, ReentrancyGuard {
 
     function unpause() external onlyOwner {
         _unpause();
+    }
+
+    // Get all campaigns (full data)
+    function getAllCampaigns() external view returns (
+        uint256[] memory ids,
+        bool[] memory actives,
+        address[] memory creators,
+        string[] memory titles,
+        string[] memory descriptions,
+        string[] memory emails,
+        uint256[] memory goals,
+        uint256[] memory raiseds,
+        string[] memory images,
+        uint256[] memory startDates,
+        uint256[] memory endDates,
+        bool[] memory isCompletes,
+        uint256[] memory withdrawnTotals
+    ) {
+        uint256 length = campaigns.length;
+
+        ids = new uint256[](length);
+        actives = new bool[](length);
+        creators = new address[](length);
+        titles = new string[](length);
+        descriptions = new string[](length);
+        emails = new string[](length);
+        goals = new uint256[](length);
+        raiseds = new uint256[](length);
+        images = new string[](length);
+        startDates = new uint256[](length);
+        endDates = new uint256[](length);
+        isCompletes = new bool[](length);
+        withdrawnTotals = new uint256[](length);
+
+        for (uint256 i = 0; i < length; i++) {
+            Campaign storage c = campaigns[i];
+            ids[i] = i;
+            actives[i] = c.active;
+            creators[i] = c.creator;
+            titles[i] = c.title;
+            descriptions[i] = c.description;
+            emails[i] = c.email;
+            goals[i] = c.goal;
+            raiseds[i] = c.raised;
+            images[i] = c.image;
+            startDates[i] = c.startDate;
+            endDates[i] = c.endDate;
+            isCompletes[i] = c.isComplete;
+            withdrawnTotals[i] = c.withdrawnTotal;
+        }
+    }
+
+    // Get donors per campaign
+    function getDonorsByCampaign(uint256 _campaignId) external view returns (
+        address[] memory donorAddresses,
+        string[] memory donorNames,
+        uint256[] memory totalDonations
+    ) {
+        if (_campaignId >= campaigns.length) revert InvalidID();
+        address[] storage list = campaignDonors[_campaignId];
+        uint256 length = list.length;
+
+        donorAddresses = new address[](length);
+        donorNames = new string[](length);
+        totalDonations = new uint256[](length);
+
+        for (uint256 i = 0; i < length; i++) {
+            address donorAddr = list[i];
+            Donor storage d = donors[donorAddr];
+            donorAddresses[i] = donorAddr;
+            donorNames[i] = d.name;
+            totalDonations[i] = donationsPerCampaign[_campaignId][donorAddr];
+        }
     }
 }
