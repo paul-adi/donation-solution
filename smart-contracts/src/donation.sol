@@ -40,6 +40,7 @@ contract Donation is Ownable, Pausable, ReentrancyGuard {
         uint256 endDate;
         bool isComplete;
         uint256 withdrawnTotal;
+        string withdrawReason; // <--- field baru
     }
 
     struct Donor {
@@ -71,11 +72,11 @@ contract Donation is Ownable, Pausable, ReentrancyGuard {
     // Events
     event CampaignCreated(uint256 indexed campaignId, address indexed creator, string title, uint256 goal, uint256 startDate, uint256 endDate);
     event Donated(uint256 indexed campaignId, address indexed donor, uint256 amount, string donorName);
-    event Withdrawn(uint256 indexed campaignId, address indexed creator, uint256 amount);
+    event Withdrawn(uint256 indexed campaignId, address indexed creator, uint256 amount, string reason);
     event PlatformFeesWithdrawn(address indexed to, uint256 amount);
     event CampaignStatusChanged(uint256 indexed campaignId, bool isActive);
 
-    constructor() Ownable(msg.sender) Pausable() {}
+    constructor() Ownable() Pausable() {}
 
     // Create campaign
     function createCampaign(
@@ -106,7 +107,8 @@ contract Donation is Ownable, Pausable, ReentrancyGuard {
             startDate: _startDate,
             endDate: _endDate,
             isComplete: false,
-            withdrawnTotal: 0
+            withdrawnTotal: 0,
+            withdrawReason: ""
         });
 
         campaigns.push(newC);
@@ -116,12 +118,13 @@ contract Donation is Ownable, Pausable, ReentrancyGuard {
     // Donate to a campaign
     function donate(
         uint256 _campaignId,
-        string memory _donorName,
-        uint256 _donatedAmount
-    ) external payable whenNotPaused validAmount(_donatedAmount) {
+        string memory _donorName
+    ) external payable whenNotPaused {
+        uint256 _donatedAmount = msg.value;
+        if (_donatedAmount == 0) revert InvalidAmount();
         if (_campaignId >= campaigns.length) revert InvalidID();
-        Campaign storage camp = campaigns[_campaignId];
 
+        Campaign storage camp = campaigns[_campaignId];
         if (!camp.active) revert CampaignInactive();
         if (block.timestamp < camp.startDate) revert NotStarted();
         if (block.timestamp > camp.endDate) revert CampaignEnded();
@@ -136,14 +139,12 @@ contract Donation is Ownable, Pausable, ReentrancyGuard {
             camp.isComplete = true;
         }
 
-        // Update global donor data
         if (donors[msg.sender].totalDonated == 0) {
             donorList.push(msg.sender);
             donors[msg.sender].name = _donorName;
         }
         donors[msg.sender].totalDonated += _donatedAmount;
 
-        // Update campaign-specific donor data
         if (!isDonorInCampaign[_campaignId][msg.sender]) {
             campaignDonors[_campaignId].push(msg.sender);
             isDonorInCampaign[_campaignId][msg.sender] = true;
@@ -154,7 +155,7 @@ contract Donation is Ownable, Pausable, ReentrancyGuard {
     }
 
     // Withdraw 25% of raised amount
-    function withdraw(uint256 _campaignId, uint256 _amount)
+    function withdraw(uint256 _campaignId, uint256 _amount, string memory _reason)
         external
         onlyCreator(_campaignId)
         nonReentrant
@@ -168,9 +169,10 @@ contract Donation is Ownable, Pausable, ReentrancyGuard {
         if (c.withdrawnTotal + _amount > maxWithdrawAllowed) revert WithdrawLimitExceeded();
 
         c.withdrawnTotal += _amount;
+        c.withdrawReason = _reason;
         c.creator.transfer(_amount);
 
-        emit Withdrawn(_campaignId, msg.sender, _amount);
+        emit Withdrawn(_campaignId, msg.sender, _amount, _reason);
     }
 
     // Withdraw platform fees
@@ -207,6 +209,47 @@ contract Donation is Ownable, Pausable, ReentrancyGuard {
         _unpause();
     }
 
+    // Fitur LeaderBoard
+    // Return top N donors by total donated amount
+    function leaderBoard(uint256 topN) external view returns (
+        address[] memory donorAddresses,
+        string[] memory donorNames,
+        uint256[] memory totalDonations
+    ) {
+        uint256 donorCount = donorList.length;
+        if (topN > donorCount) {
+            topN = donorCount;
+        }
+
+        // Copy donors into a temporary array for sorting
+        address[] memory donorsTemp = new address[](donorCount);
+        for (uint256 i = 0; i < donorCount; i++) {
+            donorsTemp[i] = donorList[i];
+        }
+
+        // Sort donorsTemp by totalDonated descending (simple bubble sort for demo; inefficient for large arrays)
+        for (uint256 i = 0; i < donorCount; i++) {
+            for (uint256 j = i + 1; j < donorCount; j++) {
+                if (donors[donorsTemp[j]].totalDonated > donors[donorsTemp[i]].totalDonated) {
+                    address tmp = donorsTemp[i];
+                    donorsTemp[i] = donorsTemp[j];
+                    donorsTemp[j] = tmp;
+                }
+            }
+        }
+
+        donorAddresses = new address[](topN);
+        donorNames = new string[](topN);
+        totalDonations = new uint256[](topN);
+
+        for (uint256 i = 0; i < topN; i++) {
+            donorAddresses[i] = donorsTemp[i];
+            donorNames[i] = donors[donorsTemp[i]].name;
+            totalDonations[i] = donors[donorsTemp[i]].totalDonated;
+        }
+    }
+
+
     // Get all campaigns (full data)
     function getAllCampaigns() external view returns (
         uint256[] memory ids,
@@ -221,7 +264,8 @@ contract Donation is Ownable, Pausable, ReentrancyGuard {
         uint256[] memory startDates,
         uint256[] memory endDates,
         bool[] memory isCompletes,
-        uint256[] memory withdrawnTotals
+        uint256[] memory withdrawnTotals,
+        string[] memory withdrawReasons
     ) {
         uint256 length = campaigns.length;
 
@@ -238,6 +282,7 @@ contract Donation is Ownable, Pausable, ReentrancyGuard {
         endDates = new uint256[](length);
         isCompletes = new bool[](length);
         withdrawnTotals = new uint256[](length);
+        withdrawReasons = new string[](length);
 
         for (uint256 i = 0; i < length; i++) {
             Campaign storage c = campaigns[i];
@@ -254,6 +299,7 @@ contract Donation is Ownable, Pausable, ReentrancyGuard {
             endDates[i] = c.endDate;
             isCompletes[i] = c.isComplete;
             withdrawnTotals[i] = c.withdrawnTotal;
+            withdrawReasons[i] = c.withdrawReason;
         }
     }
 
