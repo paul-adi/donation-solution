@@ -140,12 +140,6 @@ contract Donation is Ownable, Pausable, ReentrancyGuard {
         }
         donors[msg.sender].totalDonated += _donatedAmount;
 
-        if (!isDonorInCampaign[_campaignId][msg.sender]) {
-            campaignDonors[_campaignId].push(msg.sender);
-            isDonorInCampaign[_campaignId][msg.sender] = true;
-        }
-        donationsPerCampaign[_campaignId][msg.sender] += _donatedAmount;
-
         emit Donated(_campaignId, msg.sender, _donatedAmount, _donorName);
     }
 
@@ -205,7 +199,6 @@ contract Donation is Ownable, Pausable, ReentrancyGuard {
     }
 
     // Fitur LeaderBoard
-    // Return top N donors by total donated amount
     function leaderBoard(uint256 /* topN */)
         external
         pure
@@ -213,7 +206,7 @@ contract Donation is Ownable, Pausable, ReentrancyGuard {
         revert("leaderBoard is handled offchain via events");
     }
 
-    // Get all campaigns (full data)function getAllCampaigns()
+    // Get all campaigns
     function getAllCampaigns()
         external
         pure
