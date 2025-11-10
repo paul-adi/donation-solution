@@ -4,9 +4,12 @@ pragma solidity ^0.8.20;
 import {Ownable} from "../lib/openzeppelin-contracts/contracts/access/Ownable.sol";
 import {Pausable} from "../lib/openzeppelin-contracts/contracts/utils/Pausable.sol";
 import {ReentrancyGuard} from "../lib/openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
+import {IERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 
 contract Donation is Ownable, Pausable, ReentrancyGuard {
-    // Custom errors
+    using SafeERC20 for IERC20;
+
     error InvalidAmount();
     error InvalidID();
     error NotCreator();
@@ -16,13 +19,17 @@ contract Donation is Ownable, Pausable, ReentrancyGuard {
     error TitleRequired();
     error DescriptionRequired();
     error EmailRequired();
-    error InvalidGoal(); 
+    error InvalidGoal();
     error InvalidDates();
     error StartDateTooEarly();
     error CampaignNotComplete();
     error WithdrawLimitExceeded();
     error NoFees();
     error TransferFailed();
+    error ZeroAddress();
+
+    uint8 public constant USDC_DECIMALS = 6;
+    IERC20 public usdc;
 
     uint256 public constant PLATFORM_FEE_BPS = 100;
     uint256 public totalPlatformFees;
@@ -49,10 +56,9 @@ contract Donation is Ownable, Pausable, ReentrancyGuard {
     }
 
     Campaign[] public campaigns;
-    mapping(address => Donor) public donors;
+    mapping(address => Donor} public donors;
     address[] public donorList;
 
-    // Modifiers
     modifier onlyCreator(uint256 _campaignId) {
         if (_campaignId >= campaigns.length) revert InvalidID();
         if (campaigns[_campaignId].creator != msg.sender) revert NotCreator();
@@ -64,16 +70,25 @@ contract Donation is Ownable, Pausable, ReentrancyGuard {
         _;
     }
 
-    // Events
     event CampaignCreated(uint256 indexed campaignId, address indexed creator, string title, uint256 goal, uint256 startDate, uint256 endDate);
-    event Donated(uint256 indexed campaignId, address indexed donor, uint256 amount, string donorName);
+    event Donated(uint256 indexed campaignId, address indexed donor, uint256 amountGross, uint256 amountNet, string donorName);
     event Withdrawn(uint256 indexed campaignId, address indexed creator, uint256 amount, string reason);
     event PlatformFeesWithdrawn(address indexed to, uint256 amount);
     event CampaignStatusChanged(uint256 indexed campaignId, bool isActive);
+    event USDCAddressUpdated(address indexed oldAddress, address indexed newAddress);
 
-    constructor() Ownable(msg.sender) Pausable() {}
+    constructor(address _usdc) Ownable(msg.sender) Pausable() {
+        if (_usdc == address(0)) revert ZeroAddress();
+        usdc = IERC20(_usdc);
+    }
 
-    // Create campaign
+    function setUSDCAddress(address _usdc) external onlyOwner {
+        if (_usdc == address(0)) revert ZeroAddress();
+        address old = address(usdc);
+        usdc = IERC20(_usdc);
+        emit USDCAddressUpdated(old, _usdc);
+    }
+
     function createCampaign(
         string memory _title,
         string memory _description,
@@ -90,42 +105,48 @@ contract Donation is Ownable, Pausable, ReentrancyGuard {
         if (_startDate >= _endDate) revert InvalidDates();
         if (_startDate < block.timestamp) revert StartDateTooEarly();
 
-        Campaign memory newC = Campaign({
-            active: true,
-            creator: payable(msg.sender),
-            title: _title,
-            description: _description,
-            email: _email,
-            goal: _goal,
-            raised: 0,
-            image: _image,
-            startDate: _startDate,
-            endDate: _endDate,
-            isComplete: false,
-            withdrawnTotal: 0,
-            withdrawReason: ""
-        });
+        campaigns.push(
+            Campaign({
+                active: true,
+                creator: payable(msg.sender),
+                title: _title,
+                description: _description,
+                email: _email,
+                goal: _goal,
+                raised: 0,
+                image: _image,
+                startDate: _startDate,
+                endDate: _endDate,
+                isComplete: false,
+                withdrawnTotal: 0,
+                withdrawReason: ""
+            })
+        );
 
-        campaigns.push(newC);
         emit CampaignCreated(campaigns.length - 1, msg.sender, _title, _goal, _startDate, _endDate);
     }
 
-    // Donate to a campaign
     function donate(
         uint256 _campaignId,
+        uint256 _amount,
         string memory _donorName
-    ) external payable whenNotPaused {
-        uint256 _donatedAmount = msg.value;
-        if (_donatedAmount == 0) revert InvalidAmount();
+    ) external whenNotPaused validAmount(_amount) nonReentrant {
         if (_campaignId >= campaigns.length) revert InvalidID();
-
         Campaign storage camp = campaigns[_campaignId];
+
         if (!camp.active) revert CampaignInactive();
         if (block.timestamp < camp.startDate) revert NotStarted();
         if (block.timestamp > camp.endDate) revert CampaignEnded();
 
-        uint256 fee = (_donatedAmount * PLATFORM_FEE_BPS) / 10000;
-        uint256 netAmount = _donatedAmount - fee;
+        // AUTO-CONVERT jika frontend kirim angka tanpa desimal (misal: 1, 5, 10)
+        if (_amount < 1e6) {
+            _amount = _amount * 1e6;
+        }
+
+        usdc.safeTransferFrom(msg.sender, address(this), _amount);
+
+        uint256 fee = (_amount * PLATFORM_FEE_BPS) / 10000;
+        uint256 netAmount = _amount - fee;
         totalPlatformFees += fee;
 
         camp.raised += netAmount;
@@ -138,40 +159,40 @@ contract Donation is Ownable, Pausable, ReentrancyGuard {
             donorList.push(msg.sender);
             donors[msg.sender].name = _donorName;
         }
-        donors[msg.sender].totalDonated += _donatedAmount;
+        donors[msg.sender].totalDonated += _amount;
 
-        emit Donated(_campaignId, msg.sender, _donatedAmount, _donorName);
+        emit Donated(_campaignId, msg.sender, _amount, netAmount, _donorName);
     }
 
-    // Withdraw 25% of raised amount
     function withdraw(uint256 _campaignId, uint256 _amount, string memory _reason)
-    external
-    onlyCreator(_campaignId)
-    nonReentrant
-    whenNotPaused 
+        external
+        onlyCreator(_campaignId)
+        nonReentrant
+        whenNotPaused 
     {
         Campaign storage c = campaigns[_campaignId];
-
         if (!c.isComplete) revert CampaignNotComplete();
-        if (_amount == 0) revert InvalidAmount();
+
+        // AUTO-CONVERT jika frontend kirim angka tanpa desimal (misal: 1, 5, 10)
+        if (_amount < 1e6) {
+            _amount = _amount * 1e6;
+        }
 
         uint256 maxWithdrawAllowed = (c.raised * 25) / 100;
+
         uint256 remaining = c.raised - c.withdrawnTotal;
-        if (remaining <= maxWithdrawAllowed) maxWithdrawAllowed = remaining;
+        if (remaining < maxWithdrawAllowed) maxWithdrawAllowed = remaining;
+
         if (_amount > maxWithdrawAllowed) revert WithdrawLimitExceeded();
 
-        // Effects
         c.withdrawnTotal += _amount;
         c.withdrawReason = _reason;
 
-        // Interaction using call (more compatible than transfer)
-        (bool ok, ) = c.creator.call{value: _amount}("");
-        if (!ok) revert TransferFailed();
+        usdc.safeTransfer(c.creator, _amount);
 
         emit Withdrawn(_campaignId, msg.sender, _amount, _reason);
     }
 
-    // Withdraw platform fees
     function withdrawPlatformFees(address payable _to)
         external
         onlyOwner
@@ -181,13 +202,11 @@ contract Donation is Ownable, Pausable, ReentrancyGuard {
         if (amount == 0) revert NoFees();
 
         totalPlatformFees = 0;
-        (bool ok, ) = _to.call{value: amount}("");
-        if (!ok) revert TransferFailed();
+        usdc.safeTransfer(_to, amount);
 
         emit PlatformFeesWithdrawn(_to, amount);
     }
 
-    // Change campaign status
     function setCampaignStatus(uint256 _campaignId, bool isActive)
         external
         onlyOwner
@@ -197,27 +216,9 @@ contract Donation is Ownable, Pausable, ReentrancyGuard {
         emit CampaignStatusChanged(_campaignId, isActive);
     }
 
-    function pause() external onlyOwner {
-        _pause();
-    }
+    function pause() external onlyOwner { _pause(); }
+    function unpause() external onlyOwner { _unpause(); }
 
-    function unpause() external onlyOwner {
-        _unpause();
-    }
-
-    // Fitur LeaderBoard
-    function leaderBoard(uint256 /* topN */)
-        external
-        pure
-    {
-        revert("leaderBoard is handled offchain via events");
-    }
-
-    // Get all campaigns
-    function getAllCampaigns()
-        external
-        pure
-    {
-        revert("getAllCampaigns is handled offchain via events");
-    }
+    function leaderBoard(uint256) external pure { revert("handled offchain"); }
+    function getAllCampaigns() external pure { revert("handled offchain"); }
 }
