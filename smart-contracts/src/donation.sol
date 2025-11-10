@@ -40,7 +40,7 @@ contract Donation is Ownable, Pausable, ReentrancyGuard {
         uint256 endDate;
         bool isComplete;
         uint256 withdrawnTotal;
-        string withdrawReason; // <--- field baru
+        string withdrawReason;
     }
 
     struct Donor {
@@ -51,11 +51,6 @@ contract Donation is Ownable, Pausable, ReentrancyGuard {
     Campaign[] public campaigns;
     mapping(address => Donor) public donors;
     address[] public donorList;
-
-    // Tracking donors per campaign
-    mapping(uint256 => address[]) public campaignDonors;
-    mapping(uint256 => mapping(address => bool)) private isDonorInCampaign;
-    mapping(uint256 => mapping(address => uint256)) public donationsPerCampaign;
 
     // Modifiers
     modifier onlyCreator(uint256 _campaignId) {
@@ -211,118 +206,18 @@ contract Donation is Ownable, Pausable, ReentrancyGuard {
 
     // Fitur LeaderBoard
     // Return top N donors by total donated amount
-    function leaderBoard(uint256 topN) external view returns (
-        address[] memory donorAddresses,
-        string[] memory donorNames,
-        uint256[] memory totalDonations
-    ) {
-        uint256 donorCount = donorList.length;
-        if (topN > donorCount) {
-            topN = donorCount;
-        }
-
-        // Copy donors into a temporary array for sorting
-        address[] memory donorsTemp = new address[](donorCount);
-        for (uint256 i = 0; i < donorCount; i++) {
-            donorsTemp[i] = donorList[i];
-        }
-
-        // Sort donorsTemp by totalDonated descending (simple bubble sort for demo; inefficient for large arrays)
-        for (uint256 i = 0; i < donorCount; i++) {
-            for (uint256 j = i + 1; j < donorCount; j++) {
-                if (donors[donorsTemp[j]].totalDonated > donors[donorsTemp[i]].totalDonated) {
-                    address tmp = donorsTemp[i];
-                    donorsTemp[i] = donorsTemp[j];
-                    donorsTemp[j] = tmp;
-                }
-            }
-        }
-
-        donorAddresses = new address[](topN);
-        donorNames = new string[](topN);
-        totalDonations = new uint256[](topN);
-
-        for (uint256 i = 0; i < topN; i++) {
-            donorAddresses[i] = donorsTemp[i];
-            donorNames[i] = donors[donorsTemp[i]].name;
-            totalDonations[i] = donors[donorsTemp[i]].totalDonated;
-        }
+    function leaderBoard(uint256 /* topN */)
+        external
+        pure
+    {
+        revert("leaderBoard is handled offchain via events");
     }
 
-
-    // Get all campaigns (full data)
-    function getAllCampaigns() external view returns (
-        uint256[] memory ids,
-        bool[] memory actives,
-        address[] memory creators,
-        string[] memory titles,
-        string[] memory descriptions,
-        string[] memory emails,
-        uint256[] memory goals,
-        uint256[] memory raiseds,
-        string[] memory images,
-        uint256[] memory startDates,
-        uint256[] memory endDates,
-        bool[] memory isCompletes,
-        uint256[] memory withdrawnTotals,
-        string[] memory withdrawReasons
-    ) {
-        uint256 length = campaigns.length;
-
-        ids = new uint256[](length);
-        actives = new bool[](length);
-        creators = new address[](length);
-        titles = new string[](length);
-        descriptions = new string[](length);
-        emails = new string[](length);
-        goals = new uint256[](length);
-        raiseds = new uint256[](length);
-        images = new string[](length);
-        startDates = new uint256[](length);
-        endDates = new uint256[](length);
-        isCompletes = new bool[](length);
-        withdrawnTotals = new uint256[](length);
-        withdrawReasons = new string[](length);
-
-        for (uint256 i = 0; i < length; i++) {
-            Campaign storage c = campaigns[i];
-            ids[i] = i;
-            actives[i] = c.active;
-            creators[i] = c.creator;
-            titles[i] = c.title;
-            descriptions[i] = c.description;
-            emails[i] = c.email;
-            goals[i] = c.goal;
-            raiseds[i] = c.raised;
-            images[i] = c.image;
-            startDates[i] = c.startDate;
-            endDates[i] = c.endDate;
-            isCompletes[i] = c.isComplete;
-            withdrawnTotals[i] = c.withdrawnTotal;
-            withdrawReasons[i] = c.withdrawReason;
-        }
-    }
-
-    // Get donors per campaign
-    function getDonorsByCampaign(uint256 _campaignId) external view returns (
-        address[] memory donorAddresses,
-        string[] memory donorNames,
-        uint256[] memory totalDonations
-    ) {
-        if (_campaignId >= campaigns.length) revert InvalidID();
-        address[] storage list = campaignDonors[_campaignId];
-        uint256 length = list.length;
-
-        donorAddresses = new address[](length);
-        donorNames = new string[](length);
-        totalDonations = new uint256[](length);
-
-        for (uint256 i = 0; i < length; i++) {
-            address donorAddr = list[i];
-            Donor storage d = donors[donorAddr];
-            donorAddresses[i] = donorAddr;
-            donorNames[i] = d.name;
-            totalDonations[i] = donationsPerCampaign[_campaignId][donorAddr];
-        }
+    // Get all campaigns (full data)function getAllCampaigns()
+    function getAllCampaigns()
+        external
+        pure
+    {
+        revert("getAllCampaigns is handled offchain via events");
     }
 }
