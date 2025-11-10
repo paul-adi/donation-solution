@@ -145,9 +145,9 @@ contract Donation is Ownable, Pausable, ReentrancyGuard {
 
     // Withdraw 25% of raised amount
     function withdraw(uint256 _campaignId, uint256 _amount, string memory _reason)
-        external
-        onlyCreator(_campaignId)
-        nonReentrant
+    external
+    onlyCreator(_campaignId)
+    nonReentrant
     {
         Campaign storage c = campaigns[_campaignId];
 
@@ -155,11 +155,17 @@ contract Donation is Ownable, Pausable, ReentrancyGuard {
         if (_amount == 0) revert InvalidAmount();
 
         uint256 maxWithdrawAllowed = (c.raised * 25) / 100;
-        if (c.withdrawnTotal + _amount > maxWithdrawAllowed) revert WithdrawLimitExceeded();
+        uint256 remaining = c.raised - c.withdrawnTotal;
+        if (remaining <= maxWithdrawAllowed) maxWithdrawAllowed = remaining;
+        if (_amount > maxWithdrawAllowed) revert WithdrawLimitExceeded();
 
+        // Effects
         c.withdrawnTotal += _amount;
         c.withdrawReason = _reason;
-        c.creator.transfer(_amount);
+
+        // Interaction using call (more compatible than transfer)
+        (bool ok, ) = c.creator.call{value: _amount}("");
+        if (!ok) revert TransferFailed();
 
         emit Withdrawn(_campaignId, msg.sender, _amount, _reason);
     }
