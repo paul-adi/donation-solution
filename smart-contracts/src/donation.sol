@@ -71,7 +71,7 @@ contract Donation is Ownable, Pausable, ReentrancyGuard {
     event PlatformFeesWithdrawn(address indexed to, uint256 amount);
     event CampaignStatusChanged(uint256 indexed campaignId, bool isActive);
 
-    constructor() Ownable() Pausable() {}
+    constructor() Ownable(msg.sender) Pausable() {}
 
     // Create campaign
     function createCampaign(
