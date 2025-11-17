@@ -29,18 +29,31 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <header style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          padding: '20px 40px',
-          backgroundColor: '#f8f9fa',
-          borderBottom: '1px solid #e9ecef',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-            <h1 style={{ margin: 0, fontSize: '1.5rem', color: '#333' }}>Donation Solution</h1>
-            <Link href="/about" style={{ textDecoration: 'none', color: '#007bff', fontSize: '1rem' }}>About</Link>
+        <header
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            padding: "20px 40px",
+            backgroundColor: "#f8f9fa",
+            borderBottom: "1px solid #e9ecef",
+            boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
+            <h1 style={{ margin: 0, fontSize: "1.5rem", color: "#333" }}>
+              Donation Solution
+            </h1>
+            <Link
+              href="/about"
+              style={{
+                textDecoration: "none",
+                color: "#007bff",
+                fontSize: "1rem",
+              }}
+            >
+              About
+            </Link>
           </div>
           <WalletButton />
         </header>
