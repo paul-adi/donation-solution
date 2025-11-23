@@ -31,6 +31,10 @@ export default function RootLayout({
       >
         <header
           style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
@@ -38,26 +42,30 @@ export default function RootLayout({
             backgroundColor: "#f8f9fa",
             borderBottom: "1px solid #e9ecef",
             boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+            zIndex: 50,
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
-            <h1 style={{ margin: 0, fontSize: "1.5rem", color: "#333" }}>
-              Donation Solution
-            </h1>
             <Link
-              href="/about"
-              style={{
-                textDecoration: "none",
-                color: "#007bff",
-                fontSize: "1rem",
-              }}
+              href="/"
+              className="home-link"
             >
+              <h1 style={{ margin: 0, fontSize: "1.5rem", color: "#333" }}>
+                Donation Solution
+              </h1>
+            </Link>
+            <Link href="/about" className="create-campaign-btn">
               About
+            </Link>
+            <Link href="/create-campaign" className="create-campaign-btn">
+              Create Campaign
             </Link>
           </div>
           <WalletButton />
         </header>
-        {children}
+        <div style={{ paddingTop: 80 }}>
+          {children}
+        </div>
       </body>
     </html>
   );

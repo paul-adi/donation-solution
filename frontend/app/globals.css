@@ -35,9 +35,7 @@ body {
 
 /* Positioning */
 .wallet-root {
-  position: fixed;
-  top: 18px;
-  right: 18px;
+  position: relative;
   z-index: 60;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI",
     Roboto, "Helvetica Neue", Arial;
@@ -154,4 +152,38 @@ body {
   .wallet-menu {
     min-width: 180px;
   }
+}
+
+/* Navigation Buttons */
+.create-campaign-btn {
+  text-decoration: none;
+  padding: 10px 20px;
+  background-color: transparent;
+  color: #475569;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  display: inline-block;
+}
+
+.create-campaign-btn:hover {
+  background-color: #f1f5f9;
+  border-color: #94a3b8;
+  color: #1e293b;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+/* Home Link */
+.home-link {
+  text-decoration: none;
+  color: #333;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.home-link:hover {
+  opacity: 0.7;
 }
