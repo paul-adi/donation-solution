@@ -46,10 +46,7 @@ export default function RootLayout({
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
-            <Link
-              href="/"
-              className="home-link"
-            >
+            <Link href="/" className="home-link">
               <h1 style={{ margin: 0, fontSize: "1.5rem", color: "#333" }}>
                 Donation Solution
               </h1>
@@ -60,12 +57,13 @@ export default function RootLayout({
             <Link href="/create-campaign" className="create-campaign-btn">
               Create Campaign
             </Link>
+            <Link href="/withdrawal" className="create-campaign-btn">
+              Withdrawal
+            </Link>
           </div>
           <WalletButton />
         </header>
-        <div style={{ paddingTop: 80 }}>
-          {children}
-        </div>
+        <div style={{ paddingTop: 80 }}>{children}</div>
       </body>
     </html>
   );
