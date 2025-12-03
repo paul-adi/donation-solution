@@ -56,7 +56,7 @@ contract Donation is Ownable, Pausable, ReentrancyGuard {
     }
 
     Campaign[] public campaigns;
-    mapping(address => Donor} public donors;
+    mapping(address => Donor) public donors;
     address[] public donorList;
 
     modifier onlyCreator(uint256 _campaignId) {
