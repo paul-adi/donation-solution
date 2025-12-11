@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import "./globals.css";
-import WalletButton from "./components/WalletButton";
+// import WalletButton from "./components/WalletButton";
+
+import Header from "./components/Header";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -29,7 +31,8 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <header
+        
+        {/* <header
           style={{
             position: "fixed",
             top: 0,
@@ -62,7 +65,9 @@ export default function RootLayout({
             </Link>
           </div>
           <WalletButton />
-        </header>
+        </header> */}
+
+        <Header />
         <div style={{ paddingTop: 80 }}>{children}</div>
       </body>
     </html>
