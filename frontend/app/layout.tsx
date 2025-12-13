@@ -1,3 +1,4 @@
+// layout.tsx
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
@@ -28,48 +29,17 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        
-        {/* <header
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            padding: "20px 40px",
-            backgroundColor: "#f8f9fa",
-            borderBottom: "1px solid #e9ecef",
-            boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-            zIndex: 50,
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
-            <Link href="/" className="home-link">
-              <h1 style={{ margin: 0, fontSize: "1.5rem", color: "#333" }}>
-                Donation Solution
-              </h1>
-            </Link>
-            <Link href="/about" className="create-campaign-btn">
-              About
-            </Link>
-            <Link href="/create-campaign" className="create-campaign-btn">
-              Create Campaign
-            </Link>
-            <Link href="/withdrawal" className="create-campaign-btn">
-              Withdrawal
-            </Link>
-          </div>
-          <WalletButton />
-        </header> */}
+   <body className="min-h-screen bg-gray-50 antialiased">
+      <Header />
 
-        <Header />
-        <div style={{ paddingTop: 80 }}>{children}</div>
-      </body>
+      <main className="pt-12 md:pt-14">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          {children}
+        </div>
+      </main>
+  </body>
+
+
     </html>
   );
 }
