@@ -70,7 +70,7 @@ contract DonationToken is Ownable, Pausable, ReentrancyGuard {
         _;
     }
 
-    event CampaignCreated(uint256 indexed campaignId, address indexed creator, string title, uint256 goal, uint256 startDate, uint256 endDate);
+    event CampaignCreated(uint256 indexed campaignId, address indexed creator, string title, string image, uint256 goal, uint256 startDate, uint256 endDate);
     event Donated(uint256 indexed campaignId, address indexed donor, uint256 amountGross, uint256 amountNet, string donorName);
     event Withdrawn(uint256 indexed campaignId, address indexed creator, uint256 amount, string reason);
     event PlatformFeesWithdrawn(address indexed to, uint256 amount);
@@ -123,7 +123,7 @@ contract DonationToken is Ownable, Pausable, ReentrancyGuard {
             })
         );
 
-        emit CampaignCreated(campaigns.length - 1, msg.sender, _title, _goal, _startDate, _endDate);
+        emit CampaignCreated(campaigns.length - 1, msg.sender, _title, _image, _goal, _startDate, _endDate);
     }
 
     function donate(
