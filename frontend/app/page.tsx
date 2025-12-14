@@ -1,3 +1,4 @@
+// page.tsx sbg home page
 export default function Page() {
   return (
     <section className="py-16 text-center">
