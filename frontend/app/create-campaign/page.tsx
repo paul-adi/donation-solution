@@ -1,3 +1,4 @@
+// create campaign page
 "use client";
 
 import { useState, useEffect } from "react";
@@ -159,12 +160,12 @@ export default function CreateCampaignPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="font-semibold text-sm mb-1 block">Start Date *</label>
-                <input type="date" name="startDate" required value={formData.startDate} onChange={handleChange} className={inputClass} />
+                <label className="font-semibold text-sm mb-1 block">Start Date & Time *</label>
+                <input type="datetime-local" name="startDate" required value={formData.startDate} onChange={handleChange} className={inputClass} />
               </div>
               <div>
-                <label className="font-semibold text-sm mb-1 block">End Date *</label>
-                <input type="date" name="endDate" required value={formData.endDate} onChange={handleChange} className={inputClass} />
+                <label className="font-semibold text-sm mb-1 block">End Date & Time *</label>
+                <input type="datetime-local" name="endDate" required value={formData.endDate} onChange={handleChange} className={inputClass} />
               </div>
             </div>
 

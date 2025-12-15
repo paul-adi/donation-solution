@@ -30,14 +30,14 @@ export default function About() {
             tamper-proof.
           </p>
 
-          <div className="flex justify-center">
+          {/* <div className="flex justify-center">
             <a
               href="/donate"
               className="px-8 py-3 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-xl shadow-md transition-all"
             >
               Start Donating
             </a>
-          </div>
+          </div> */}
         </div>
       </div>
     </section>

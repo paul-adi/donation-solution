@@ -1,4 +1,6 @@
 // page.tsx sbg home page
+import Link from "next/link";
+
 export default function Page() {
   return (
     <section className="py-16 text-center">
@@ -14,9 +16,11 @@ export default function Page() {
         </p>
 
         <div className="mt-6">
-          <button className="px-8 py-3 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-xl shadow-md transition-all">
-            Start Donating
-          </button>
+          <Link href="/donate">
+            <button className="px-8 py-3 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-xl shadow-md transition-all">
+              Start Donating
+            </button>
+          </Link>
         </div>
       </div>
 
