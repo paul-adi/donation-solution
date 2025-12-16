@@ -1,22 +1,16 @@
-// campaign list page
 "use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ethers } from "ethers";
 import abi from "@/lib/abi/DonationToken.json";
+import { CONTRACT_ADDRESS } from "@/lib/addresses";
 
 /* =========================
    CONFIG
 ========================= */
 const USDC_DECIMALS = 6;
 const PER_PAGE = 2;
-
-const NETWORK_CONTRACTS: Record<number, { donation: string }> = {
-  11155111: {
-    donation: "0xc8d97C1A068C7f1900adeD0bC32240eefa0Fd3E0",
-  },
-};
 
 /* =========================
    TYPES
@@ -50,21 +44,13 @@ export default function CampaignListPage() {
       if (!window.ethereum) return;
 
       const provider = new ethers.BrowserProvider(window.ethereum);
-      const network = await provider.getNetwork();
-      const chainId = Number(network.chainId);
 
-      const cfg = NETWORK_CONTRACTS[chainId];
-      if (!cfg) return;
+      // Pakai CONTRACT_ADDRESS import
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, abi.abi, provider);
 
-      const contract = new ethers.Contract(cfg.donation, abi.abi, provider);
+      const events = await contract.queryFilter(contract.filters.CampaignCreated());
 
-      const events = await contract.queryFilter(
-        contract.filters.CampaignCreated()
-      );
-
-      const validEvents = events.filter(
-        (e: any) => e.args && e.args.campaignId !== undefined
-      );
+      const validEvents = events.filter((e: any) => e.args && e.args.campaignId !== undefined);
 
       const list = await Promise.all(
         validEvents.map(async (e: any) => {
@@ -93,36 +79,28 @@ export default function CampaignListPage() {
     }
   }
 
-  if (loading) {
-    return <p className="text-center py-12">Loading campaigns...</p>;
-  }
+  if (loading) return <p className="text-center py-12">Loading campaigns...</p>;
 
   const totalPages = Math.ceil(campaigns.length / PER_PAGE);
   const startIndex = (page - 1) * PER_PAGE;
-  const pageCampaigns = campaigns.slice(
-    startIndex,
-    startIndex + PER_PAGE
-  );
+  const pageCampaigns = campaigns.slice(startIndex, startIndex + PER_PAGE);
 
   return (
-    <section className="max-w-5xl mx-auto px-6 py-20">
+    <section className="max-w-5xl mx-auto px-6 py-15">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
         {pageCampaigns.map((c) => {
-          const goal = Number(
-            ethers.formatUnits(c.goal, USDC_DECIMALS)
-          );
-          const raised = Number(
-            ethers.formatUnits(c.raised, USDC_DECIMALS)
-          );
+          const goal = Number(ethers.formatUnits(c.goal, USDC_DECIMALS));
+          const raised = Number(ethers.formatUnits(c.raised, USDC_DECIMALS));
+          const percent = goal > 0 ? Math.min((raised / goal) * 100, 100) : 0;
+          const now = Math.floor(Date.now() / 1000);
 
-          const percent =
-            goal > 0 ? Math.min((raised / goal) * 100, 100) : 0;
+          let status = "";
+          if (now < Number(c.startDate)) status = "Not started yet";
+          else if (now > Number(c.endDate) && !c.isComplete) status = "Campaign period over";
+          else if (c.isComplete) status = "Campaign has ended";
+          else status = "Active";
 
-          const now = Date.now() / 1000;
-          const end = Number(c.endDate);
-
-          const status =
-            c.isComplete || now > end ? "Ended" : "Active";
+          const endDateStr = new Date(Number(c.endDate) * 1000).toLocaleDateString();
 
           return (
             <Link
@@ -130,51 +108,33 @@ export default function CampaignListPage() {
               href={`/donate/${c.id}`}
               className="bg-white border rounded-3xl overflow-hidden hover:shadow-xl transition flex flex-col"
             >
-              {/* IMAGE */}
-              {c.image && (
-                <img
-                  src={c.image}
-                  alt={c.title}
-                  className="h-52 w-full object-cover"
-                />
-              )}
+              {c.image && <img src={c.image} alt={c.title} className="h-60 w-full object-cover" />}
 
               <div className="p-6 flex-1 flex flex-col">
-                <h2 className="font-semibold text-xl mb-4">
-                  {c.title}
-                </h2>
+                <h2 className="font-semibold text-xl mb-4">{c.title}</h2>
 
                 <div className="w-full bg-gray-200 rounded-full h-3">
                   <div
-                    className={`h-3 rounded-full ${
-                      c.isComplete
-                        ? "bg-green-500"
-                        : "bg-blue-500"
-                    }`}
+                    className={`h-3 rounded-full ${c.isComplete ? "bg-green-500" : "bg-blue-500"}`}
                     style={{ width: `${percent}%` }}
                   />
                 </div>
 
                 <div className="flex justify-between text-sm mt-2 text-gray-600">
-                  <span>${raised.toLocaleString()} raised</span>
-                  <span>{percent.toFixed(0)}%</span>
+                  <span>{raised.toFixed(6)} USDC raised</span>
+                  <span>{percent.toFixed(1)}%</span>
                 </div>
 
                 <div className="mt-6 flex justify-between items-center text-sm">
                   <span
                     className={`px-4 py-1 rounded-full ${
-                      status === "Active"
-                        ? "bg-blue-100 text-blue-700"
-                        : "bg-gray-200 text-gray-700"
+                      status.includes("Active") ? "bg-blue-100 text-blue-700" : "bg-gray-200 text-gray-700"
                     }`}
                   >
                     {status}
                   </span>
 
-                  <span className="text-gray-500">
-                    Ends{" "}
-                    {new Date(end * 1000).toLocaleDateString()}
-                  </span>
+                  <span className="text-gray-500">Ends {endDateStr}</span>
                 </div>
               </div>
             </Link>
@@ -182,7 +142,6 @@ export default function CampaignListPage() {
         })}
       </div>
 
-      {/* PAGINATION */}
       {totalPages > 1 && (
         <div className="flex justify-center gap-4 mt-14">
           <button
@@ -192,15 +151,11 @@ export default function CampaignListPage() {
           >
             Prev
           </button>
-
           <span className="px-5 py-2 text-gray-600">
             Page {page} / {totalPages}
           </span>
-
           <button
-            onClick={() =>
-              setPage((p) => Math.min(totalPages, p + 1))
-            }
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={page === totalPages}
             className="px-5 py-2 rounded-xl border disabled:opacity-40"
           >

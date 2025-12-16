@@ -70,7 +70,8 @@ contract DonationToken is Ownable, Pausable, ReentrancyGuard {
         _;
     }
 
-    event CampaignCreated(uint256 indexed campaignId, address indexed creator, string title, string image, uint256 goal, uint256 startDate, uint256 endDate);
+    event CampaignCreated(uint256 indexed campaignId, address indexed creator, string title,  string image, uint256 goal, uint256 startDate, uint256 endDate);
+    
     event Donated(uint256 indexed campaignId, address indexed donor, uint256 amountGross, uint256 amountNet, string donorName);
     event Withdrawn(uint256 indexed campaignId, address indexed creator, uint256 amount, string reason);
     event PlatformFeesWithdrawn(address indexed to, uint256 amount);
@@ -171,6 +172,11 @@ contract DonationToken is Ownable, Pausable, ReentrancyGuard {
         whenNotPaused 
     {
         Campaign storage c = campaigns[_campaignId];
+
+        if ((block.timestamp > c.endDate || c.raised >= c.goal) && !c.isComplete) {
+            c.isComplete = true;
+        }
+
         if (!c.isComplete) revert CampaignNotComplete();
 
         // AUTO-CONVERT jika frontend kirim angka tanpa desimal (misal: 1, 5, 10)

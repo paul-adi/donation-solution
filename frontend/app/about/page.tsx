@@ -1,9 +1,8 @@
-// page.tsx sbg about page
-
 export default function About() {
   return (
-    <section className="py-20">
+    <section className="py-15">
       <div className="max-w-3xl mx-auto">
+        {/* Card utama */}
         <div className="bg-white/70 backdrop-blur-md p-10 rounded-3xl shadow-lg border border-white/40">
           
           <h1 className="text-3xl md:text-4xl font-bold text-gray-800 mb-6 text-center">
@@ -29,15 +28,14 @@ export default function About() {
             knowing that every transaction is verifiable, traceable, and
             tamper-proof.
           </p>
+        </div>
 
-          {/* <div className="flex justify-center">
-            <a
-              href="/donate"
-              className="px-8 py-3 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-xl shadow-md transition-all"
-            >
-              Start Donating
-            </a>
-          </div> */}
+        {/* Garis pemisah */}
+        <div className="mt-6 border-t border-gray-300"></div>
+
+        {/* Copyright / Team */}
+        <div className="mt-4 text-center text-sm text-gray-500">
+          © 2025 ~ Team 5 : Andi - Paulus Adiatma - Fathir Yudhistira - Benityo Maxwell - Rudy Surya
         </div>
       </div>
     </section>

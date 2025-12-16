@@ -5,8 +5,7 @@ import { useState, useEffect } from "react";
 import { ethers } from "ethers";
 import donationTokenJson from "@/lib/abi/DonationToken.json";
 import Image from "next/image";
-
-const CONTRACT_ADDRESS = "0xc8d97C1A068C7f1900adeD0bC32240eefa0Fd3E0";
+import { CONTRACT_ADDRESS } from "@/lib/addresses";
 
 interface CampaignFormData {
   title: string;
@@ -115,7 +114,7 @@ export default function CreateCampaignPage() {
     "w-full p-3 rounded-xl bg-white border border-gray-200 shadow-sm focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-200";
 
   return (
-    <section className="py-20">
+    <section className="py-15">
       <div className="max-w-3xl mx-auto">
         <div className="bg-white/70 backdrop-blur-md px-10 pb-10 pt-6 rounded-3xl shadow-lg border border-white/40">
 

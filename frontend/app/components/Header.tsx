@@ -1,4 +1,3 @@
-// Header.tsx
 "use client";
 
 import Link from "next/link";
@@ -16,7 +15,6 @@ export default function Header() {
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2">
             <Image src="/usdcseed.png" width={36} height={36} alt="SEED" />
-            <span className="font-bold text-white">SEED</span>
           </Link>
 
           {/* Desktop Nav */}
@@ -24,8 +22,9 @@ export default function Header() {
             <NavLink href="/about">About</NavLink>
             <NavLink href="/create-campaign">Create Campaign</NavLink>
             <NavLink href="/withdrawal">Withdrawal</NavLink>
+            <NavLink href="/leaderboard">🏆 Leaderboard</NavLink>
             <NavLink href="/donate" primary>
-              Donate
+              <span className="text-white">Donate</span>
             </NavLink>
           </nav>
 
@@ -47,8 +46,9 @@ export default function Header() {
             <MobileLink href="/about">About</MobileLink>
             <MobileLink href="/create-campaign">Create Campaign</MobileLink>
             <MobileLink href="/withdrawal">Withdrawal</MobileLink>
+            <MobileLink href="/leaderboard">🏆 Leaderboard</MobileLink>
             <MobileLink href="/donate" primary>
-              Donate
+              <span className="text-white">Donate</span>
             </MobileLink>
           </div>
         )}
@@ -72,7 +72,7 @@ function NavLink({
       className={`px-4 py-2 rounded-lg text-sm font-medium transition
         ${
           primary
-            ? "bg-orange-500 text-white hover:bg-orange-600"
+            ? "bg-orange-500 hover:bg-orange-600"
             : "bg-white/90 text-gray-700 hover:bg-white"
         }`}
     >
@@ -96,8 +96,8 @@ function MobileLink({
       className={`px-4 py-3 rounded-lg text-sm font-medium
         ${
           primary
-            ? "bg-orange-500 text-white"
-            : "bg-white text-gray-700"
+            ? "bg-orange-500 hover:bg-orange-600"
+            : "bg-white text-gray-700 hover:bg-gray-100"
         }`}
     >
       {children}
