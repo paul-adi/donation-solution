@@ -8,7 +8,6 @@ import { CONTRACT_ADDRESS } from "@/lib/addresses";
 
 const USDC_DECIMALS = 6;
 
-// Kalau mau fleksibel untuk USDC per chain, tetap bisa pakai object
 const NETWORK_USDC: Record<number, string> = {
   1: "0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // Mainnet
   11155111: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238", // Sepolia
@@ -97,7 +96,6 @@ export default function DonatePage() {
   // APPROVE
   const handleApprove = async () => {
     if (!chainId) return;
-
     try {
       setIsApproving(true);
       setStatus("Approving USDC...");
@@ -126,7 +124,13 @@ export default function DonatePage() {
 
   // DONATE
   const handleDonate = async () => {
-    if (!chainId || !amount) return;
+    if (!chainId) return;
+
+    const amt = amount.trim();
+    if (!amt || isNaN(Number(amt)) || Number(amt) <= 0) {
+      setStatus("Invalid donation amount");
+      return;
+    }
 
     try {
       setIsDonating(true);
@@ -136,7 +140,8 @@ export default function DonatePage() {
       const signer = await provider.getSigner();
       const contract = new ethers.Contract(CONTRACT_ADDRESS, abi.abi, signer);
 
-      const value = ethers.parseUnits(amount, USDC_DECIMALS);
+      const value = ethers.parseUnits(amt, USDC_DECIMALS);
+
       const tx = await contract.donate(campaignId, value, donorName || "Anonymous");
       await tx.wait();
 
@@ -145,7 +150,7 @@ export default function DonatePage() {
         raised: BigInt(prev.raised) + (BigInt(value.toString()) * 99n) / 100n,
       }));
 
-      setUsdcBalance((b) => b - Number(amount));
+      setUsdcBalance((b) => b - Number(amt));
       setAmount("");
       setDonorName("");
       setStatus("Donation successful 🎉");
@@ -178,10 +183,13 @@ export default function DonatePage() {
       <div className="max-w-2xl mx-auto bg-white/70 backdrop-blur-md p-4 rounded-3xl shadow-lg">
         <h1 className="text-2xl font-bold mb-1">{campaign.title}</h1>
         <p className="text-xs text-gray-500 mb-2">Start: {startDateStr} | End: {endDateStr}</p>
+
         <div className="h-[13.5rem] mb-3 rounded-xl overflow-hidden bg-gray-100">
           <img src={campaign.image} alt={campaign.title} className="w-full h-full object-cover" />
         </div>
+
         {campaignStatus && <p className="text-center mb-2 text-sm font-semibold text-gray-700">{campaignStatus}</p>}
+
         <div className="mb-4">
           <div className="flex justify-between text-sm mb-1">
             <span className="font-semibold">Raised: {raised.toFixed(6)} USDC</span>
@@ -195,15 +203,40 @@ export default function DonatePage() {
             {campaign.isComplete && <span className="text-green-600 font-semibold">Completed ✔</span>}
           </div>
         </div>
-        <input className="w-full p-2 border rounded-xl mb-2 text-sm" placeholder="Your Name" value={donorName} onChange={(e) => setDonorName(e.target.value)} disabled={inputsDisabled} />
-        <input className="w-full p-2 border rounded-xl mb-3 text-sm" placeholder="Amount (USDC)" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} disabled={inputsDisabled} />
+
+        {/* DONATE FORM */}
+        <input
+          type="text"
+          className="w-full p-2 border rounded-xl mb-2 text-sm"
+          placeholder="Your Name"
+          value={donorName}
+          onChange={(e) => setDonorName(e.target.value)}
+          disabled={inputsDisabled}
+        />
+
+        <input
+          type="text"
+          className="w-full p-2 border rounded-xl mb-3 text-sm"
+          placeholder="Amount (USDC)"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ""))}
+          disabled={inputsDisabled}
+        />
 
         {Number(amount) > allowance ? (
-          <button onClick={handleApprove} disabled={isApproving || inputsDisabled} className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-xl mb-2 text-sm disabled:bg-gray-400">
+          <button
+            onClick={handleApprove}
+            disabled={isApproving || inputsDisabled}
+            className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-xl mb-2 text-sm disabled:bg-gray-400"
+          >
             {isApproving ? "Approving..." : "Approve USDC"}
           </button>
         ) : (
-          <button onClick={handleDonate} disabled={isDonating || Number(amount) > usdcBalance || inputsDisabled} className="w-full bg-orange-500 hover:bg-orange-600 text-white py-2 rounded-xl mb-2 text-sm disabled:bg-gray-400">
+          <button
+            onClick={handleDonate}
+            disabled={isDonating || Number(amount) > usdcBalance || inputsDisabled}
+            className="w-full bg-orange-500 hover:bg-orange-600 text-white py-2 rounded-xl mb-2 text-sm disabled:bg-gray-400"
+          >
             {isDonating ? "Processing..." : "Donate with USDC"}
           </button>
         )}

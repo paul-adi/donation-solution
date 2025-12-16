@@ -39,19 +39,19 @@ export default function LeaderboardPage() {
 
           const donorAddr = ev.args.donor;
           const donorName = ev.args.donorName;
-          const amount = Number(ev.args.amountGross) / 1_000_000;
+          const amountNet = Number(ev.args.amountNet) / 1_000_000;
 
           if (!donorTotals[donorAddr]) {
-            donorTotals[donorAddr] = { name: donorName, total: amount };
+            donorTotals[donorAddr] = { name: donorName, total: amountNet };
           } else {
-            donorTotals[donorAddr].total += amount;
+            donorTotals[donorAddr].total += amountNet;
           }
         }
 
         const sortedDonors = Object.entries(donorTotals)
           .map(([address, data]) => ({ address, ...data }))
           .sort((a, b) => b.total - a.total)
-          .slice(0, 3); // top 3
+          .slice(0, 3);
 
         setTopDonors(sortedDonors);
       } catch (err) {
@@ -66,49 +66,77 @@ export default function LeaderboardPage() {
 
   const getCardStyles = (rank: number) => {
     switch (rank) {
-      case 0: return "bg-orange-500 text-white";
-      case 1: return "bg-sky-300 text-black";
-      case 2: return "bg-green-200 text-black";
-      default: return "bg-white text-black";
+      case 0:
+        return "bg-orange-500 text-white";
+      case 1:
+        return "bg-sky-300 text-black";
+      case 2:
+        return "bg-green-200 text-black";
+      default:
+        return "bg-white text-black";
     }
   };
 
   const getTrophy = (rank: number) => {
     switch (rank) {
-      case 0: return "🥇";
-      case 1: return "🥈";
-      case 2: return "🥉";
-      default: return "🏆";
+      case 0:
+        return "🥇";
+      case 1:
+        return "🥈";
+      case 2:
+        return "🥉";
+      default:
+        return "🏆";
     }
   };
 
   return (
     <section className="py-16">
-      <div className="max-w-3xl mx-auto text-center">
-        <h1 className="text-3xl font-bold mb-6">Leaderboard {year}</h1>
+      <div className="max-w-5xl mx-auto text-center">
+        {/* 3 Bintang */}
+        <div className="flex justify-center mb-4 text-yellow-400 text-3xl gap-2">
+          <span>⭐</span>
+          <span>⭐</span>
+          <span>⭐</span>
+        </div>
+
+        <h1 className="text-3xl font-bold mb-8">SEED Champions {year}</h1>
 
         {loading ? (
           <p>Loading top donors...</p>
         ) : topDonors.length === 0 ? (
           <p>No donations found for this year.</p>
         ) : (
-          <ol className="space-y-4">
-            {topDonors.map((donor, idx) => (
-              <li
-                key={donor.address}
-                className={`flex justify-between items-center p-4 rounded-xl shadow-md ${getCardStyles(idx)}`}
-              >
-                <div className="flex flex-col items-start gap-1">
-                  <div className="flex items-center gap-2 text-lg font-semibold">
-                    <span className="text-2xl">{getTrophy(idx)}</span>
+          <div className="flex justify-center items-end gap-6 mt-10">
+            {topDonors.map((donor, idx) => {
+              // podium heights, lebih tinggi untuk top 1
+              const heights = [220, 180, 160];
+              return (
+                <div
+                  key={donor.address}
+                  className={`flex flex-col justify-between items-center p-4 rounded-xl shadow-md ${getCardStyles(
+                    idx
+                  )}`}
+                  style={{ minWidth: "160px", height: `${heights[idx]}px` }}
+                >
+                  <div className="text-4xl mb-2">{getTrophy(idx)}</div>
+                  <div className="flex items-center gap-2 font-semibold text-lg">
+                    <span className="text-xl">{idx + 1}.</span>
                     <span>{donor.name}</span>
                   </div>
-                  <span className={`text-sm ${idx === 0 ? "text-white" : "text-black"}`}>{donor.address}</span>
+                  <div
+                    className={`text-xs mt-1 break-words text-center ${
+                      idx === 0 ? "text-white" : "text-black"
+                    }`}
+                    style={{ wordBreak: "break-word" }}
+                  >
+                    {donor.address}
+                  </div>
+                  <div className="font-bold text-lg mt-2">{donor.total.toFixed(2)} USDC</div>
                 </div>
-                <span className="font-bold text-lg">{donor.total.toFixed(2)} USDC</span>
-              </li>
-            ))}
-          </ol>
+              );
+            })}
+          </div>
         )}
       </div>
     </section>
