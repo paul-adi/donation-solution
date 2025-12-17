@@ -35,7 +35,7 @@ export default function About() {
 
         {/* Copyright / Team */}
         <div className="mt-4 text-center text-sm text-gray-500">
-          © 2025 ~ Team 5 : Andi - Paulus Adiatma - Fathir Yudhistira - Benityo Maxwell - Rudy Surya
+          © 2025 ~ Team 5 : Andi - Paulus Adiatma - Benityo Maxwell - Fathir Yudhistira -  Rudy Surya
         </div>
       </div>
     </section>

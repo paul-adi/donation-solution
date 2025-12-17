@@ -19,12 +19,12 @@ export default function DonatePage() {
   const [address, setAddress] = useState<string | null>(null);
   const [chainId, setChainId] = useState<number | null>(null);
 
-  const [amount, setAmount] = useState("");
-  const [donorName, setDonorName] = useState("");
-  const [status, setStatus] = useState("");
+  const [amount, setAmount] = useState<string>("");
+  const [donorName, setDonorName] = useState<string>("");
+  const [status, setStatus] = useState<string>("");
 
-  const [usdcBalance, setUsdcBalance] = useState<number>(0);
-  const [allowance, setAllowance] = useState<number>(0);
+  const [usdcBalance, setUsdcBalance] = useState<bigint>(0n);
+  const [allowance, setAllowance] = useState<bigint>(0n);
 
   const [isApproving, setIsApproving] = useState(false);
   const [isDonating, setIsDonating] = useState(false);
@@ -92,8 +92,8 @@ export default function DonatePage() {
       const bal = await usdc.balanceOf(address);
       const alw = await usdc.allowance(address, CONTRACT_ADDRESS);
 
-      setUsdcBalance(Number(bal) / 1_000_000);
-      setAllowance(Number(alw) / 1_000_000);
+      setUsdcBalance(bal);
+      setAllowance(alw);
     })();
   }, [address, chainId]);
 
@@ -119,7 +119,7 @@ export default function DonatePage() {
       const tx = await usdc.approve(CONTRACT_ADDRESS, ethers.MaxUint256);
       await tx.wait();
 
-      setAllowance(Number.MAX_SAFE_INTEGER);
+      setAllowance(ethers.MaxUint256);
       setStatus("USDC approved");
     } catch (e: any) {
       setStatus(e?.reason || e?.message || "Approve failed");
@@ -134,9 +134,16 @@ export default function DonatePage() {
   const handleDonate = async () => {
     if (!chainId) return;
 
-    const amt = Number(amount);
-    if (!amt || amt <= 0) {
-      setStatus("Invalid amount");
+    let amountBN: bigint;
+    try {
+      amountBN = ethers.parseUnits(amount, 6);
+    } catch {
+      setStatus("Invalid amount format");
+      return;
+    }
+
+    if (amountBN < 1_000_000n) {
+      setStatus("Minimum donation is 1 USDC");
       return;
     }
 
@@ -148,10 +155,9 @@ export default function DonatePage() {
       const signer = await provider.getSigner();
       const contract = new ethers.Contract(CONTRACT_ADDRESS, abi.abi, signer);
 
-      // ⚠️ KIRIM ANGKA APA ADANYA
       const tx = await contract.donate(
         campaignId,
-        Math.floor(amt),
+        amountBN,
         donorName || "Anonymous"
       );
 
@@ -167,38 +173,32 @@ export default function DonatePage() {
     }
   };
 
-  /* =====================
-     GUARD
-  ====================== */
   if (!campaign) {
     return <p className="text-center mt-10">Loading campaign...</p>;
   }
 
-  /* =====================
-     DISPLAY DATA
-  ====================== */
   const goal = Number(campaign.goal) / 1_000_000;
   const raised = Number(campaign.raised) / 1_000_000;
   const progress = goal === 0 ? 0 : Math.min((raised / goal) * 100, 100);
 
   const now = Math.floor(Date.now() / 1000);
-  let disabled = false;
-  let campaignStatus = "";
+  const disabled = now < Number(campaign.startDate) || now > Number(campaign.endDate);
 
-  if (now < Number(campaign.startDate)) {
-    disabled = true;
-    campaignStatus = "Campaign not started yet";
-  } else if (now > Number(campaign.endDate)) {
-    disabled = true;
-    campaignStatus = "Campaign has ended";
-  }
+  const amountBN = (() => {
+    try {
+      return ethers.parseUnits(amount || "0", 6);
+    } catch {
+      return 0n;
+    }
+  })();
+
+  const needsApproval = amountBN > allowance;
 
   return (
     <section className="py-12">
       <div className="max-w-xl mx-auto bg-white/80 backdrop-blur-md p-4 rounded-3xl shadow-lg">
         <h1 className="text-2xl font-bold mb-1">{campaign.title}</h1>
 
-        {/* IMAGE */}
         {campaign.image && (
           <div className="mt-3 mb-4 h-56 rounded-xl overflow-hidden bg-gray-100">
             <img
@@ -213,18 +213,9 @@ export default function DonatePage() {
           </div>
         )}
 
-        {campaignStatus && (
-          <p className="text-center text-sm mb-2 text-gray-600 font-semibold">
-            {campaignStatus}
-          </p>
-        )}
-
-        {/* PROGRESS */}
         <div className="mb-4">
           <div className="flex justify-between text-sm mb-1">
-            <span className="font-semibold">
-              Raised: {raised.toFixed(2)} USDC
-            </span>
+            <span className="font-semibold">Raised: {raised.toFixed(2)} USDC</span>
             <span className="text-gray-500">{progress.toFixed(1)}%</span>
           </div>
 
@@ -243,7 +234,6 @@ export default function DonatePage() {
           </div>
         </div>
 
-        {/* FORM */}
         <input
           type="text"
           className="w-full p-2 border rounded-xl mb-2 text-sm"
@@ -258,11 +248,14 @@ export default function DonatePage() {
           className="w-full p-2 border rounded-xl mb-3 text-sm"
           placeholder="Amount (USDC)"
           value={amount}
-          onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, ""))}
+          onChange={(e) => {
+            const v = e.target.value.replace(/[^0-9.]/g, "");
+            if ((v.match(/\./g) || []).length <= 1) setAmount(v);
+          }}
           disabled={disabled}
         />
 
-        {Number(amount) > allowance ? (
+        {needsApproval ? (
           <button
             onClick={handleApprove}
             disabled={isApproving || disabled}
