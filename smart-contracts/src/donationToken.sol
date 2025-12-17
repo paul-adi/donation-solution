@@ -27,7 +27,10 @@ contract DonationToken is Ownable, Pausable, ReentrancyGuard {
     error NoFees();
     error TransferFailed();
     error ZeroAddress();
-
+    error MinimumWithdrawIsOneUSDC();
+    error NothingToWithdraw();
+    error MustWithdrawAllRemaining();
+    
     uint8 public constant USDC_DECIMALS = 6;
     IERC20 public usdc;
 
@@ -70,7 +73,7 @@ contract DonationToken is Ownable, Pausable, ReentrancyGuard {
         _;
     }
 
-    event CampaignCreated(uint256 indexed campaignId, address indexed creator, string title,  string image, uint256 goal, uint256 startDate, uint256 endDate);
+    event CampaignCreated(uint256 indexed campaignId, address indexed creator, string title,  string description, string image, uint256 goal, uint256 startDate, uint256 endDate);
     
     event Donated(uint256 indexed campaignId, address indexed donor, uint256 amountGross, uint256 amountNet, string donorName);
     event Withdrawn(uint256 indexed campaignId, address indexed creator, uint256 amount, string reason);
@@ -124,7 +127,7 @@ contract DonationToken is Ownable, Pausable, ReentrancyGuard {
             })
         );
 
-        emit CampaignCreated(campaigns.length - 1, msg.sender, _title, _image, _goal, _startDate, _endDate);
+        emit CampaignCreated(campaigns.length - 1, msg.sender, _title, _description, _image, _goal, _startDate, _endDate);
     }
 
     function donate(
@@ -165,11 +168,11 @@ contract DonationToken is Ownable, Pausable, ReentrancyGuard {
         emit Donated(_campaignId, msg.sender, _amount, netAmount, _donorName);
     }
 
-    function withdraw(uint256 _campaignId, uint256 _amount, string memory _reason)
+    function withdraw(uint256 _campaignId, uint256 _amount, string memory _reason    )
         external
         onlyCreator(_campaignId)
         nonReentrant
-        whenNotPaused 
+        whenNotPaused
     {
         Campaign storage c = campaigns[_campaignId];
 
@@ -179,17 +182,24 @@ contract DonationToken is Ownable, Pausable, ReentrancyGuard {
 
         if (!c.isComplete) revert CampaignNotComplete();
 
-        // AUTO-CONVERT jika frontend kirim angka tanpa desimal (misal: 1, 5, 10)
-        if (_amount < 1e6) {
-            _amount = _amount * 1e6;
-        }
-
-        uint256 maxWithdrawAllowed = (c.raised * 25) / 100;
-
         uint256 remaining = c.raised - c.withdrawnTotal;
-        if (remaining < maxWithdrawAllowed) maxWithdrawAllowed = remaining;
+        if (remaining == 0) revert NothingToWithdraw();
 
-        if (_amount > maxWithdrawAllowed) revert WithdrawLimitExceeded();
+        uint256 maxPerWithdraw = (c.raised * 25) / 100;
+
+        // CASE 1: 25% < 1 USDC → FINAL ONLY
+        if (maxPerWithdraw < 1e6) {
+            if (_amount != remaining) revert MustWithdrawAllRemaining();
+        }
+        // CASE 2: FINAL WITHDRAW NORMAL
+        else if (remaining <= maxPerWithdraw) {
+            if (_amount != remaining) revert MustWithdrawAllRemaining();
+        }
+        // CASE 3: NORMAL WITHDRAW
+        else {
+            if (_amount < 1e6) revert MinimumWithdrawIsOneUSDC();
+            if (_amount > maxPerWithdraw) revert WithdrawLimitExceeded();
+        }
 
         c.withdrawnTotal += _amount;
         c.withdrawReason = _reason;
@@ -198,6 +208,7 @@ contract DonationToken is Ownable, Pausable, ReentrancyGuard {
 
         emit Withdrawn(_campaignId, msg.sender, _amount, _reason);
     }
+
 
     function withdrawPlatformFees(address payable _to)
         external
