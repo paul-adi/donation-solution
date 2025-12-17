@@ -13,6 +13,14 @@ const USDC_DECIMALS = 6;
 const PER_PAGE = 2;
 
 /* =========================
+   EXPLORER MAP
+========================= */
+const EXPLORER_BY_CHAIN: Record<number, string> = {
+  1: "https://etherscan.io/address/",
+  11155111: "https://sepolia.etherscan.io/address/",
+};
+
+/* =========================
    TYPES
 ========================= */
 type Campaign = {
@@ -25,6 +33,21 @@ type Campaign = {
   endDate: bigint;
   isComplete: boolean;
   active: boolean;
+  creator: string;
+};
+
+/* =========================
+   HELPERS
+========================= */
+const shortAddress = (addr?: string) =>
+  typeof addr === "string" && addr.length > 10
+    ? `${addr.slice(0, 6)}...${addr.slice(-4)}`
+    : "Unknown";
+
+const explorerAddress = (chainId?: number, address?: string) => {
+  if (!chainId || !address) return "#";
+  const base = EXPLORER_BY_CHAIN[chainId];
+  return base ? `${base}${address}` : "#";
 };
 
 /* =========================
@@ -34,7 +57,30 @@ export default function CampaignListPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
+  const [chainId, setChainId] = useState<number | null>(null);
 
+  // 🔑 state untuk icon copy
+  const [copiedId, setCopiedId] = useState<number | null>(null);
+
+  /* WALLET / CHAIN */
+  useEffect(() => {
+    const eth = (window as any)?.ethereum;
+    if (!eth) return;
+
+    const onChain = (c: string) => setChainId(parseInt(c, 16));
+    eth.on("chainChanged", onChain);
+
+    (async () => {
+      const cid = await eth.request({ method: "eth_chainId" });
+      setChainId(parseInt(cid, 16));
+    })();
+
+    return () => {
+      eth.removeListener("chainChanged", onChain);
+    };
+  }, []);
+
+  /* FETCH CAMPAIGNS */
   useEffect(() => {
     fetchCampaigns();
   }, []);
@@ -44,17 +90,16 @@ export default function CampaignListPage() {
       if (!window.ethereum) return;
 
       const provider = new ethers.BrowserProvider(window.ethereum);
-
-      // Pakai CONTRACT_ADDRESS import
       const contract = new ethers.Contract(CONTRACT_ADDRESS, abi.abi, provider);
 
-      const events = await contract.queryFilter(contract.filters.CampaignCreated());
-
-      const validEvents = events.filter((e: any) => e.args && e.args.campaignId !== undefined);
+      const events = await contract.queryFilter(
+        contract.filters.CampaignCreated()
+      );
 
       const list = await Promise.all(
-        validEvents.map(async (e: any) => {
-          const id = Number(e.args.campaignId);
+        events.map(async (e: any) => {
+          const id = Number(e.args.campaignId ?? e.args[0]);
+          const creator = e.args.creator ?? e.args[1];
           const c = await contract.campaigns(id);
 
           return {
@@ -67,6 +112,7 @@ export default function CampaignListPage() {
             endDate: c.endDate,
             isComplete: c.isComplete,
             active: c.active,
+            creator,
           };
         })
       );
@@ -79,28 +125,40 @@ export default function CampaignListPage() {
     }
   }
 
-  if (loading) return <p className="text-center py-12">Loading campaigns...</p>;
+  /* COPY HANDLER */
+  const handleCopy = async (
+    e: React.MouseEvent,
+    campaignId: number,
+    address: string
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    await navigator.clipboard.writeText(address);
+    setCopiedId(campaignId);
+
+    setTimeout(() => {
+      setCopiedId(null);
+    }, 1500);
+  };
+
+  if (loading) {
+    return <p className="text-center py-12">Loading campaigns...</p>;
+  }
 
   const totalPages = Math.ceil(campaigns.length / PER_PAGE);
-  const startIndex = (page - 1) * PER_PAGE;
-  const pageCampaigns = campaigns.slice(startIndex, startIndex + PER_PAGE);
+  const pageCampaigns = campaigns.slice(
+    (page - 1) * PER_PAGE,
+    page * PER_PAGE
+  );
 
   return (
-    <section className="max-w-5xl mx-auto px-6 py-15">
+    <section className="max-w-5xl mx-auto px-6 py-16">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
         {pageCampaigns.map((c) => {
           const goal = Number(ethers.formatUnits(c.goal, USDC_DECIMALS));
           const raised = Number(ethers.formatUnits(c.raised, USDC_DECIMALS));
-          const percent = goal > 0 ? Math.min((raised / goal) * 100, 100) : 0;
-          const now = Math.floor(Date.now() / 1000);
-
-          let status = "";
-          if (now < Number(c.startDate)) status = "Not started yet";
-          else if (now > Number(c.endDate) && !c.isComplete) status = "Campaign period over";
-          else if (c.isComplete) status = "Campaign has ended";
-          else status = "Active";
-
-          const endDateStr = new Date(Number(c.endDate) * 1000).toLocaleDateString();
+          const percent = goal ? Math.min((raised / goal) * 100, 100) : 0;
 
           return (
             <Link
@@ -108,33 +166,61 @@ export default function CampaignListPage() {
               href={`/donate/${c.id}`}
               className="bg-white border rounded-3xl overflow-hidden hover:shadow-xl transition flex flex-col"
             >
-              {c.image && <img src={c.image} alt={c.title} className="h-60 w-full object-cover" />}
+              {c.image && (
+                <img
+                  src={c.image}
+                  alt={c.title}
+                  className="h-60 w-full object-cover"
+                />
+              )}
 
-              <div className="p-6 flex-1 flex flex-col">
-                <h2 className="font-semibold text-xl mb-4">{c.title}</h2>
+              <div className="p-6 flex flex-col flex-1">
+                <h2 className="font-semibold text-xl mb-1">{c.title}</h2>
 
+                {/* CREATOR */}
+                <div className="flex items-center gap-2 text-xs text-gray-600 mb-4">
+                  <span
+                    className="px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 border border-yellow-300 font-semibold"
+                    title="Campaign creator stored on blockchain"
+                  >
+                    ⭐ On-chain Creator
+                  </span>
+
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      window.open(
+                        explorerAddress(chainId ?? undefined, c.creator),
+                        "_blank"
+                      );
+                    }}
+                    className="hover:underline"
+                    title="View creator on explorer"
+                  >
+                    {shortAddress(c.creator)}
+                  </button>
+
+                  <button
+                    onClick={(e) => handleCopy(e, c.id, c.creator)}
+                    className="text-gray-400 hover:text-gray-700"
+                    title="Copy address"
+                  >
+                    {copiedId === c.id ? "✅" : "📋"}
+                  </button>
+                </div>
+
+                {/* PROGRESS */}
                 <div className="w-full bg-gray-200 rounded-full h-3">
                   <div
-                    className={`h-3 rounded-full ${c.isComplete ? "bg-green-500" : "bg-blue-500"}`}
+                    className="h-3 rounded-full bg-blue-500"
                     style={{ width: `${percent}%` }}
                   />
                 </div>
 
                 <div className="flex justify-between text-sm mt-2 text-gray-600">
-                  <span>{raised.toFixed(6)} USDC raised</span>
+                  <span>{raised.toFixed(2)} USDC</span>
                   <span>{percent.toFixed(1)}%</span>
-                </div>
-
-                <div className="mt-6 flex justify-between items-center text-sm">
-                  <span
-                    className={`px-4 py-1 rounded-full ${
-                      status.includes("Active") ? "bg-blue-100 text-blue-700" : "bg-gray-200 text-gray-700"
-                    }`}
-                  >
-                    {status}
-                  </span>
-
-                  <span className="text-gray-500">Ends {endDateStr}</span>
                 </div>
               </div>
             </Link>
@@ -142,6 +228,7 @@ export default function CampaignListPage() {
         })}
       </div>
 
+      {/* PAGINATION */}
       {totalPages > 1 && (
         <div className="flex justify-center gap-4 mt-14">
           <button
@@ -151,9 +238,11 @@ export default function CampaignListPage() {
           >
             Prev
           </button>
+
           <span className="px-5 py-2 text-gray-600">
             Page {page} / {totalPages}
           </span>
+
           <button
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={page === totalPages}

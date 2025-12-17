@@ -6,11 +6,27 @@ import { ethers } from "ethers";
 import abi from "@/lib/abi/DonationToken.json";
 import { CONTRACT_ADDRESS } from "@/lib/addresses";
 
+/* =====================
+   CONFIG
+===================== */
+const USDC_DECIMALS = 6;
+
 const NETWORK_USDC: Record<number, string> = {
-  1: "0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // Mainnet
-  11155111: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238", // Sepolia
+  1: "0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+  11155111: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
 };
 
+/* =====================
+   HELPERS
+===================== */
+function shortAddress(addr?: string) {
+  if (!addr || addr.length < 10) return "Unknown";
+  return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+}
+
+/* =====================
+   PAGE
+===================== */
 export default function DonatePage() {
   const params = useParams();
   const campaignId = Number(params.campaignId);
@@ -19,15 +35,14 @@ export default function DonatePage() {
   const [address, setAddress] = useState<string | null>(null);
   const [chainId, setChainId] = useState<number | null>(null);
 
-  const [amount, setAmount] = useState<string>("");
-  const [donorName, setDonorName] = useState<string>("");
-  const [status, setStatus] = useState<string>("");
+  const [amount, setAmount] = useState("");
+  const [donorName, setDonorName] = useState("");
+  const [status, setStatus] = useState("");
 
-  const [usdcBalance, setUsdcBalance] = useState<bigint>(0n);
   const [allowance, setAllowance] = useState<bigint>(0n);
-
   const [isApproving, setIsApproving] = useState(false);
   const [isDonating, setIsDonating] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   /* =====================
      WALLET
@@ -70,36 +85,37 @@ export default function DonatePage() {
   }, [chainId, campaignId]);
 
   /* =====================
-     BALANCE & ALLOWANCE
+     ALLOWANCE
   ====================== */
   useEffect(() => {
     if (!address || !chainId) return;
 
     (async () => {
-      const usdcAddress = NETWORK_USDC[chainId];
-      if (!usdcAddress) return;
+      const usdcAddr = NETWORK_USDC[chainId];
+      if (!usdcAddr) return;
 
       const provider = new ethers.BrowserProvider(window.ethereum);
       const usdc = new ethers.Contract(
-        usdcAddress,
-        [
-          "function balanceOf(address) view returns (uint256)",
-          "function allowance(address,address) view returns (uint256)",
-        ],
+        usdcAddr,
+        ["function allowance(address,address) view returns (uint256)"],
         provider
       );
 
-      const bal = await usdc.balanceOf(address);
       const alw = await usdc.allowance(address, CONTRACT_ADDRESS);
-
-      setUsdcBalance(bal);
       setAllowance(alw);
     })();
   }, [address, chainId]);
 
   /* =====================
-     APPROVE
+     ACTIONS
   ====================== */
+  const handleCopy = async () => {
+    if (!campaign?.creator) return;
+    await navigator.clipboard.writeText(campaign.creator);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
   const handleApprove = async () => {
     if (!chainId) return;
 
@@ -128,15 +144,12 @@ export default function DonatePage() {
     }
   };
 
-  /* =====================
-     DONATE
-  ====================== */
   const handleDonate = async () => {
     if (!chainId) return;
 
     let amountBN: bigint;
     try {
-      amountBN = ethers.parseUnits(amount, 6);
+      amountBN = ethers.parseUnits(amount, USDC_DECIMALS);
     } catch {
       setStatus("Invalid amount format");
       return;
@@ -182,11 +195,13 @@ export default function DonatePage() {
   const progress = goal === 0 ? 0 : Math.min((raised / goal) * 100, 100);
 
   const now = Math.floor(Date.now() / 1000);
-  const disabled = now < Number(campaign.startDate) || now > Number(campaign.endDate);
+  const disabled =
+    now < Number(campaign.startDate) ||
+    now > Number(campaign.endDate);
 
   const amountBN = (() => {
     try {
-      return ethers.parseUnits(amount || "0", 6);
+      return ethers.parseUnits(amount || "0", USDC_DECIMALS);
     } catch {
       return 0n;
     }
@@ -194,13 +209,30 @@ export default function DonatePage() {
 
   const needsApproval = amountBN > allowance;
 
+  /* =====================
+     RENDER
+  ====================== */
   return (
     <section className="py-12">
-      <div className="max-w-xl mx-auto bg-white/80 backdrop-blur-md p-4 rounded-3xl shadow-lg">
+      <div className="max-w-xl mx-auto bg-white/80 backdrop-blur-md p-5 rounded-3xl shadow-lg">
         <h1 className="text-2xl font-bold mb-1">{campaign.title}</h1>
 
+        {/* CREATOR */}
+        <div className="flex items-center gap-2 text-xs text-gray-500 mb-3">
+          <span>Created by {shortAddress(campaign.creator)}</span>
+
+          <button
+            onClick={handleCopy}
+            className="text-gray-400 hover:text-gray-700"
+            title="Copy creator address"
+          >
+            {copied ? "✅" : "📋"}
+          </button>
+        </div>
+
+        {/* IMAGE */}
         {campaign.image && (
-          <div className="mt-3 mb-4 h-56 rounded-xl overflow-hidden bg-gray-100">
+          <div className="mb-4 h-56 rounded-xl overflow-hidden bg-gray-100">
             <img
               src={campaign.image}
               alt={campaign.title}
@@ -213,9 +245,12 @@ export default function DonatePage() {
           </div>
         )}
 
+        {/* PROGRESS */}
         <div className="mb-4">
           <div className="flex justify-between text-sm mb-1">
-            <span className="font-semibold">Raised: {raised.toFixed(2)} USDC</span>
+            <span className="font-semibold">
+              Raised: {raised.toFixed(2)} USDC
+            </span>
             <span className="text-gray-500">{progress.toFixed(1)}%</span>
           </div>
 
@@ -225,15 +260,9 @@ export default function DonatePage() {
               style={{ width: `${progress}%` }}
             />
           </div>
-
-          <div className="flex justify-between text-xs text-gray-500 mt-1">
-            <span>Goal: {goal.toFixed(2)} USDC</span>
-            {campaign.isComplete && (
-              <span className="text-green-600 font-semibold">Completed ✔</span>
-            )}
-          </div>
         </div>
 
+        {/* INPUTS */}
         <input
           type="text"
           className="w-full p-2 border rounded-xl mb-2 text-sm"
@@ -255,6 +284,7 @@ export default function DonatePage() {
           disabled={disabled}
         />
 
+        {/* BUTTON */}
         {needsApproval ? (
           <button
             onClick={handleApprove}
