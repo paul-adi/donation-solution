@@ -20,14 +20,11 @@ ponder.on("DonationToken:CampaignCreated", async ({ event, context }) => {
     active: true,
     creator,
     title,
-    description: "", // Not in event, but required in schema
-    email: "", // Not in event
     goal,
     raised: 0n,
     image,
     startDate,
     endDate,
-    isComplete: false,
     withdrawnTotal: 0n,
     withdrawReason: null,
     createdAt: event.block.timestamp,
@@ -47,7 +44,6 @@ ponder.on("DonationToken:CampaignCreated", async ({ event, context }) => {
       id: "global",
       totalCampaigns: 1,
       activeCampaigns: 1,
-      completedCampaigns: 0,
       totalRaised: 0n,
       totalDonations: 0,
       uniqueDonors: 0,
@@ -96,7 +92,7 @@ ponder.on("DonationToken:PlatformFeesWithdrawn", async ({ event, context }) => {
   } else {
     await db.insert(platformFees).values({
       id: "global",
-      totalFees: 0n, // Assuming we don't track totalFees from events, maybe need to calculate
+      totalFees: 0n,
       totalWithdrawn: amount,
       lastUpdated: event.block.timestamp,
     });
@@ -175,6 +171,23 @@ ponder.on("DonationToken:Donated", async ({ event, context }) => {
     await db.update(campaign, { id: campaignId.toString() }).set({
       raised: camp.raised + amountNet,
       updatedAt: event.block.timestamp,
+    });
+  }
+
+  // Update platform fees total
+  const fee = amountGross - amountNet;
+  const fees = await db.find(platformFees, { id: "global" });
+  if (fees) {
+    await db.update(platformFees, { id: "global" }).set({
+      totalFees: fees.totalFees + fee,
+      lastUpdated: event.block.timestamp,
+    });
+  } else {
+    await db.insert(platformFees).values({
+      id: "global",
+      totalFees: fee,
+      totalWithdrawn: 0n,
+      lastUpdated: event.block.timestamp,
     });
   }
 
