@@ -6,8 +6,6 @@ import { ethers } from "ethers";
 import abi from "@/lib/abi/DonationToken.json";
 import { CONTRACT_ADDRESS } from "@/lib/addresses";
 
-const USDC_DECIMALS = 6;
-
 const NETWORK_USDC: Record<number, string> = {
   1: "0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // Mainnet
   11155111: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238", // Sepolia
@@ -25,13 +23,15 @@ export default function DonatePage() {
   const [donorName, setDonorName] = useState("");
   const [status, setStatus] = useState("");
 
-  const [usdcBalance, setUsdcBalance] = useState(0);
-  const [allowance, setAllowance] = useState(0);
+  const [usdcBalance, setUsdcBalance] = useState<number>(0);
+  const [allowance, setAllowance] = useState<number>(0);
 
   const [isApproving, setIsApproving] = useState(false);
   const [isDonating, setIsDonating] = useState(false);
 
-  // WALLET
+  /* =====================
+     WALLET
+  ====================== */
   useEffect(() => {
     const eth = (window as any)?.ethereum;
     if (!eth) return;
@@ -55,9 +55,11 @@ export default function DonatePage() {
     };
   }, []);
 
-  // FETCH CAMPAIGN
+  /* =====================
+     FETCH CAMPAIGN
+  ====================== */
   useEffect(() => {
-    if (!chainId || !Number.isFinite(campaignId)) return;
+    if (!chainId || !Number.isInteger(campaignId)) return;
 
     (async () => {
       const provider = new ethers.BrowserProvider(window.ethereum);
@@ -67,7 +69,9 @@ export default function DonatePage() {
     })();
   }, [chainId, campaignId]);
 
-  // FETCH USDC BALANCE & ALLOWANCE
+  /* =====================
+     BALANCE & ALLOWANCE
+  ====================== */
   useEffect(() => {
     if (!address || !chainId) return;
 
@@ -88,24 +92,26 @@ export default function DonatePage() {
       const bal = await usdc.balanceOf(address);
       const alw = await usdc.allowance(address, CONTRACT_ADDRESS);
 
-      setUsdcBalance(Number(ethers.formatUnits(bal, USDC_DECIMALS)));
-      setAllowance(Number(ethers.formatUnits(alw, USDC_DECIMALS)));
+      setUsdcBalance(Number(bal) / 1_000_000);
+      setAllowance(Number(alw) / 1_000_000);
     })();
   }, [address, chainId]);
 
-  // APPROVE
+  /* =====================
+     APPROVE
+  ====================== */
   const handleApprove = async () => {
     if (!chainId) return;
+
     try {
       setIsApproving(true);
       setStatus("Approving USDC...");
 
-      const usdcAddress = NETWORK_USDC[chainId];
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
 
       const usdc = new ethers.Contract(
-        usdcAddress,
+        NETWORK_USDC[chainId],
         ["function approve(address,uint256) returns (bool)"],
         signer
       );
@@ -116,19 +122,21 @@ export default function DonatePage() {
       setAllowance(Number.MAX_SAFE_INTEGER);
       setStatus("USDC approved");
     } catch (e: any) {
-      setStatus(e?.reason || e?.message || "Approval failed");
+      setStatus(e?.reason || e?.message || "Approve failed");
     } finally {
       setIsApproving(false);
     }
   };
 
-  // DONATE
+  /* =====================
+     DONATE
+  ====================== */
   const handleDonate = async () => {
     if (!chainId) return;
 
-    const amt = amount.trim();
-    if (!amt || isNaN(Number(amt)) || Number(amt) <= 0) {
-      setStatus("Invalid donation amount");
+    const amt = Number(amount);
+    if (!amt || amt <= 0) {
+      setStatus("Invalid amount");
       return;
     }
 
@@ -140,17 +148,15 @@ export default function DonatePage() {
       const signer = await provider.getSigner();
       const contract = new ethers.Contract(CONTRACT_ADDRESS, abi.abi, signer);
 
-      const value = ethers.parseUnits(amt, USDC_DECIMALS);
+      // ⚠️ KIRIM ANGKA APA ADANYA
+      const tx = await contract.donate(
+        campaignId,
+        Math.floor(amt),
+        donorName || "Anonymous"
+      );
 
-      const tx = await contract.donate(campaignId, value, donorName || "Anonymous");
       await tx.wait();
 
-      setCampaign((prev: any) => ({
-        ...prev,
-        raised: BigInt(prev.raised) + (BigInt(value.toString()) * 99n) / 100n,
-      }));
-
-      setUsdcBalance((b) => b - Number(amt));
       setAmount("");
       setDonorName("");
       setStatus("Donation successful 🎉");
@@ -161,57 +167,90 @@ export default function DonatePage() {
     }
   };
 
-  if (!campaign) return <p className="text-center mt-15">Loading campaign...</p>;
+  /* =====================
+     GUARD
+  ====================== */
+  if (!campaign) {
+    return <p className="text-center mt-10">Loading campaign...</p>;
+  }
 
-  const goal = Number(ethers.formatUnits(campaign.goal, USDC_DECIMALS));
-  const raised = Number(ethers.formatUnits(campaign.raised, USDC_DECIMALS));
+  /* =====================
+     DISPLAY DATA
+  ====================== */
+  const goal = Number(campaign.goal) / 1_000_000;
+  const raised = Number(campaign.raised) / 1_000_000;
   const progress = goal === 0 ? 0 : Math.min((raised / goal) * 100, 100);
 
-  // STATUS LOGIC
   const now = Math.floor(Date.now() / 1000);
+  let disabled = false;
   let campaignStatus = "";
-  let inputsDisabled = false;
-  if (now < Number(campaign.startDate)) { campaignStatus = "Not started yet"; inputsDisabled = true; }
-  else if (now > Number(campaign.endDate) && !campaign.isComplete) { campaignStatus = "Campaign period over"; inputsDisabled = true; }
-  else if (campaign.isComplete) { campaignStatus = "Campaign has ended"; inputsDisabled = true; }
 
-  const startDateStr = new Date(Number(campaign.startDate) * 1000).toLocaleString();
-  const endDateStr = new Date(Number(campaign.endDate) * 1000).toLocaleString();
+  if (now < Number(campaign.startDate)) {
+    disabled = true;
+    campaignStatus = "Campaign not started yet";
+  } else if (now > Number(campaign.endDate)) {
+    disabled = true;
+    campaignStatus = "Campaign has ended";
+  }
 
   return (
-    <section className="py-15">
-      <div className="max-w-2xl mx-auto bg-white/70 backdrop-blur-md p-4 rounded-3xl shadow-lg">
+    <section className="py-12">
+      <div className="max-w-xl mx-auto bg-white/80 backdrop-blur-md p-4 rounded-3xl shadow-lg">
         <h1 className="text-2xl font-bold mb-1">{campaign.title}</h1>
-        <p className="text-xs text-gray-500 mb-2">Start: {startDateStr} | End: {endDateStr}</p>
 
-        <div className="h-[13.5rem] mb-3 rounded-xl overflow-hidden bg-gray-100">
-          <img src={campaign.image} alt={campaign.title} className="w-full h-full object-cover" />
-        </div>
+        {/* IMAGE */}
+        {campaign.image && (
+          <div className="mt-3 mb-4 h-56 rounded-xl overflow-hidden bg-gray-100">
+            <img
+              src={campaign.image}
+              alt={campaign.title}
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).src =
+                  "https://via.placeholder.com/600x400?text=No+Image";
+              }}
+            />
+          </div>
+        )}
 
-        {campaignStatus && <p className="text-center mb-2 text-sm font-semibold text-gray-700">{campaignStatus}</p>}
+        {campaignStatus && (
+          <p className="text-center text-sm mb-2 text-gray-600 font-semibold">
+            {campaignStatus}
+          </p>
+        )}
 
+        {/* PROGRESS */}
         <div className="mb-4">
           <div className="flex justify-between text-sm mb-1">
-            <span className="font-semibold">Raised: {raised.toFixed(6)} USDC</span>
+            <span className="font-semibold">
+              Raised: {raised.toFixed(2)} USDC
+            </span>
             <span className="text-gray-500">{progress.toFixed(1)}%</span>
           </div>
+
           <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
-            <div className="h-2 bg-gradient-to-r from-green-400 to-emerald-600 transition-all" style={{ width: `${progress}%` }} />
+            <div
+              className="h-2 bg-gradient-to-r from-green-400 to-emerald-600"
+              style={{ width: `${progress}%` }}
+            />
           </div>
+
           <div className="flex justify-between text-xs text-gray-500 mt-1">
-            <span>Goal: {goal.toFixed(6)} USDC</span>
-            {campaign.isComplete && <span className="text-green-600 font-semibold">Completed ✔</span>}
+            <span>Goal: {goal.toFixed(2)} USDC</span>
+            {campaign.isComplete && (
+              <span className="text-green-600 font-semibold">Completed ✔</span>
+            )}
           </div>
         </div>
 
-        {/* DONATE FORM */}
+        {/* FORM */}
         <input
           type="text"
           className="w-full p-2 border rounded-xl mb-2 text-sm"
           placeholder="Your Name"
           value={donorName}
           onChange={(e) => setDonorName(e.target.value)}
-          disabled={inputsDisabled}
+          disabled={disabled}
         />
 
         <input
@@ -219,14 +258,14 @@ export default function DonatePage() {
           className="w-full p-2 border rounded-xl mb-3 text-sm"
           placeholder="Amount (USDC)"
           value={amount}
-          onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ""))}
-          disabled={inputsDisabled}
+          onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, ""))}
+          disabled={disabled}
         />
 
         {Number(amount) > allowance ? (
           <button
             onClick={handleApprove}
-            disabled={isApproving || inputsDisabled}
+            disabled={isApproving || disabled}
             className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-xl mb-2 text-sm disabled:bg-gray-400"
           >
             {isApproving ? "Approving..." : "Approve USDC"}
@@ -234,14 +273,16 @@ export default function DonatePage() {
         ) : (
           <button
             onClick={handleDonate}
-            disabled={isDonating || Number(amount) > usdcBalance || inputsDisabled}
+            disabled={isDonating || disabled}
             className="w-full bg-orange-500 hover:bg-orange-600 text-white py-2 rounded-xl mb-2 text-sm disabled:bg-gray-400"
           >
             {isDonating ? "Processing..." : "Donate with USDC"}
           </button>
         )}
 
-        {status && <p className="text-center mt-2 text-gray-700 text-sm">{status}</p>}
+        {status && (
+          <p className="text-center mt-2 text-gray-700 text-sm">{status}</p>
+        )}
       </div>
     </section>
   );

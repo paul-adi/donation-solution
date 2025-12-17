@@ -34,7 +34,9 @@ export default function WithdrawalPage() {
   const [txHash, setTxHash] = useState<string | null>(null);
   const [maxWithdrawAllowed, setMaxWithdrawAllowed] = useState<number | null>(null);
 
-  // Detect wallet
+  /* =====================
+     WALLET DETECTION
+  ====================== */
   useEffect(() => {
     const ethereum = (window as any)?.ethereum;
     if (!ethereum) return;
@@ -48,7 +50,9 @@ export default function WithdrawalPage() {
     });
   }, []);
 
-  // Fetch user's campaigns from contract
+  /* =====================
+     FETCH USER CAMPAIGNS
+  ====================== */
   useEffect(() => {
     if (!connectedAddress) {
       setCampaigns([]);
@@ -79,10 +83,6 @@ export default function WithdrawalPage() {
           const goal = Number(c.goal) / 1_000_000;
           const endDate = Number(c.endDate);
 
-          // Show campaign if:
-          // - already complete
-          // - OR raised >= goal
-          // - OR endDate passed
           if (c.isComplete || raised >= goal || endDate <= now) {
             userCampaigns.push({
               id: campaignId,
@@ -105,55 +105,76 @@ export default function WithdrawalPage() {
     fetchUserCampaigns();
   }, [connectedAddress]);
 
+  /* =====================
+     FORM HANDLERS
+  ====================== */
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
 
     if (name === "withdrawalAmount") {
-      const numValue = value.replace(/[^0-9.]/g, "");
-      const parts = numValue.split(".");
-      const formattedValue = parts.length > 2 ? parts[0] + "." + parts.slice(1).join("") : numValue;
-      setFormData(prev => ({ ...prev, [name]: formattedValue }));
-    } else if (name === "campaignId") {
+      const cleaned = value.replace(/[^0-9.]/g, "");
+      const parts = cleaned.split(".");
+      const formatted = parts.length > 2 ? parts[0] + "." + parts.slice(1).join("") : cleaned;
+      setFormData(prev => ({ ...prev, [name]: formatted }));
+      return;
+    }
+
+    if (name === "campaignId") {
       setFormData(prev => ({ ...prev, [name]: value }));
       const selected = campaigns.find(c => c.id === value);
       if (selected) {
-        const maxWithdraw = Math.min(selected.raised * 0.25, selected.raised - selected.withdrawnTotal);
-        setMaxWithdrawAllowed(parseFloat(maxWithdraw.toFixed(6)));
+        const max = Math.min(selected.raised * 0.25, selected.raised - selected.withdrawnTotal);
+        setMaxWithdrawAllowed(parseFloat(max.toFixed(6)));
       } else {
         setMaxWithdrawAllowed(null);
       }
-    } else {
-      setFormData(prev => ({ ...prev, [name]: value }));
+      return;
     }
+
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleMaxClick = () => {
     if (maxWithdrawAllowed !== null) {
-      const valueStr = maxWithdrawAllowed.toFixed(6);
-      setFormData(prev => ({ ...prev, withdrawalAmount: valueStr }));
+      setFormData(prev => ({ ...prev, withdrawalAmount: maxWithdrawAllowed.toFixed(6) }));
     }
   };
 
+  /* =====================
+     SUBMIT
+  ====================== */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
     if (!connectedAddress) {
-      setSubmitStatus({ type: "error", message: "Please connect your wallet first" });
+      setSubmitStatus({ type: "error", message: "Please connect your wallet" });
       return;
     }
+
     if (!formData.campaignId) {
-      setSubmitStatus({ type: "error", message: "Please select a campaign" });
+      setSubmitStatus({ type: "error", message: "Select a campaign" });
       return;
     }
-    if (!formData.withdrawalAmount || parseFloat(formData.withdrawalAmount) <= 0) {
-      setSubmitStatus({ type: "error", message: "Enter a valid withdrawal amount" });
+
+    const amount = Number(formData.withdrawalAmount);
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setSubmitStatus({ type: "error", message: "Withdrawal amount must be greater than 0" });
       return;
     }
+
+    if (amount < 0.000001) {
+      setSubmitStatus({ type: "error", message: "Minimum withdrawal is 0.000001 USDC" });
+      return;
+    }
+
     if (!formData.withdrawalReason) {
-      setSubmitStatus({ type: "error", message: "Provide a reason for withdrawal" });
+      setSubmitStatus({ type: "error", message: "Provide a withdrawal reason" });
       return;
     }
-    if (maxWithdrawAllowed !== null && parseFloat(formData.withdrawalAmount) > maxWithdrawAllowed) {
-      setSubmitStatus({ type: "error", message: `Amount exceeds max allowed withdrawal: ${maxWithdrawAllowed.toFixed(6)} USDC` });
+
+    if (maxWithdrawAllowed !== null && amount > maxWithdrawAllowed) {
+      setSubmitStatus({ type: "error", message: `Amount exceeds max allowed: ${maxWithdrawAllowed.toFixed(6)} USDC` });
       return;
     }
 
@@ -167,14 +188,16 @@ export default function WithdrawalPage() {
       const signer = await provider.getSigner();
       const contract = new ethers.Contract(CONTRACT_ADDRESS, donationTokenJson.abi, signer);
 
-      let amount = parseFloat(formData.withdrawalAmount);
-      if (amount < 1e6) amount = amount * 1_000_000;
+      const tx = await contract.withdraw(
+        formData.campaignId,
+        amount, // CONTRACT AUTO-CONVERT
+        formData.withdrawalReason
+      );
 
-      const tx = await contract.withdraw(formData.campaignId, Math.floor(amount), formData.withdrawalReason);
-      setSubmitStatus({ type: null, message: "Waiting for transaction confirmation..." });
+      setSubmitStatus({ type: null, message: "Waiting for confirmation..." });
       const receipt = await tx.wait();
       setTxHash(receipt.transactionHash);
-      setSubmitStatus({ type: "success", message: "Withdrawal successful!" });
+      setSubmitStatus({ type: "success", message: "Withdrawal successful" });
 
       setFormData({ campaignId: "", withdrawalAmount: "", withdrawalReason: "" });
       setMaxWithdrawAllowed(null);
@@ -188,74 +211,71 @@ export default function WithdrawalPage() {
   const inputClass = "w-full p-3 rounded-xl bg-white border border-gray-200 shadow-sm focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-200";
 
   return (
-    <section className="py-15">
+    <section className="py-16">
       <div className="max-w-3xl mx-auto">
         <div className="bg-white/70 backdrop-blur-md px-10 pb-10 pt-6 rounded-3xl shadow-lg border border-white/40">
           <div className="mb-8 text-center">
-            <h1 className="text-3xl md:text-4xl font-bold text-gray-800 mb-2">Withdrawal Request</h1>
-            <p className="text-gray-600">Request a withdrawal from your completed or ended campaigns</p>
+            <h1 className="text-3xl font-bold text-gray-800">Withdrawal Request</h1>
+            <p className="text-gray-600">Withdraw funds from completed campaigns</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label className="font-semibold text-sm mb-1 block">Select Your Campaign *</label>
-              <select name="campaignId" value={formData.campaignId} onChange={handleChange} className={inputClass}>
-                <option value="">-- Select a campaign --</option>
-                {campaigns.map(c => {
-                  let statusLabel = "";
-                  const now = Math.floor(Date.now() / 1000);
+            <select name="campaignId" value={formData.campaignId} onChange={handleChange} className={inputClass}>
+              <option value="">-- Select Campaign --</option>
+              {campaigns.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.title} — Raised {c.raised.toFixed(6)} USDC
+                </option>
+              ))}
+            </select>
 
-                  if (c.isComplete) statusLabel = "Completed";
-                  else if (c.raised >= c.goal) statusLabel = "Goal Reached";
-                  else if (c.endDate < now) statusLabel = "Time Over";
+            {maxWithdrawAllowed !== null && (
+              <div className="flex items-center space-x-2 text-sm">
+                <button type="button" onClick={handleMaxClick} className="px-3 py-1 bg-orange-200 rounded">Max</button>
+                <span>{maxWithdrawAllowed.toFixed(6)} USDC</span>
+              </div>
+            )}
 
-                  return (
-                    <option key={c.id} value={c.id}>
-                      {c.title} (Raised: {c.raised.toFixed(6)} USDC) {statusLabel && `- ${statusLabel}`}
-                    </option>
-                  );
-                })}
-              </select>
+            <input
+              type="text"
+              name="withdrawalAmount"
+              value={formData.withdrawalAmount}
+              onChange={handleChange}
+              placeholder="0.000000"
+              className={inputClass}
+            />
 
-              {maxWithdrawAllowed !== null && (
-                <div className="mt-2 flex items-center space-x-2 text-sm text-gray-600">
-                  <button type="button" onClick={handleMaxClick} className="px-3 py-1 bg-orange-200 text-orange-800 rounded">Max</button>
-                  <span>{maxWithdrawAllowed.toFixed(6)} USDC</span>
-                </div>
-              )}
-            </div>
-
-            <div>
-              <label className="font-semibold text-sm mb-1 block">Withdrawal Amount (USDC) *</label>
-              <input type="text" name="withdrawalAmount" value={formData.withdrawalAmount} onChange={handleChange} placeholder="0.000000" className={inputClass} />
-            </div>
-
-            <div>
-              <label className="font-semibold text-sm mb-1 block">Withdrawal Reason *</label>
-              <textarea
-                name="withdrawalReason"
-                value={formData.withdrawalReason}
-                onChange={handleChange}
-                rows={3}                 // lebih pendek
-                placeholder="Explain the reason..."
-                className="w-full p-3 rounded-xl bg-white border border-gray-200 shadow-sm focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-200 h-20" // height tetap bisa di-set
-              />
-            </div>
+            <textarea
+              name="withdrawalReason"
+              value={formData.withdrawalReason}
+              onChange={handleChange}
+              rows={3}
+              placeholder="Withdrawal reason"
+              className={inputClass}
+            />
 
             {submitStatus.type && (
-              <div className={`p-4 rounded-xl border text-sm ${submitStatus.type === "success" ? "bg-green-100 border-green-300 text-green-700" : "bg-red-100 border-red-300 text-red-700"}`}>
+              <div className={`p-4 rounded-xl text-sm ${submitStatus.type === "success" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
                 {submitStatus.message}
               </div>
             )}
 
             {txHash && (
-              <a href={`https://sepolia.etherscan.io/tx/${txHash}`} target="_blank" className="block text-orange-600 underline text-sm">
-                View Transaction on Etherscan
+              <a
+                href={`https://sepolia.etherscan.io/tx/${txHash}`}
+                target="_blank"
+                className="text-orange-600 underline text-sm"
+              >
+                View on Etherscan
               </a>
             )}
 
-            <button type="submit" disabled={isSubmitting || !connectedAddress || campaigns.length === 0} className={`w-full py-3 rounded-xl font-semibold transition ${!connectedAddress || campaigns.length === 0 ? "bg-gray-400 cursor-not-allowed text-white" : "bg-orange-500 hover:bg-orange-600 text-white"}`}>
-              {!connectedAddress ? "Please Connect Wallet" : campaigns.length === 0 ? "No Campaigns Available" : isSubmitting ? "Submitting..." : "Submit Withdrawal"}
+            <button
+              type="submit"
+              disabled={isSubmitting || !connectedAddress}
+              className="w-full py-3 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-semibold"
+            >
+              {isSubmitting ? "Submitting..." : "Submit Withdrawal"}
             </button>
           </form>
         </div>
