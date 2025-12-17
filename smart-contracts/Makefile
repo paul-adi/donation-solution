@@ -10,11 +10,11 @@ test:
 
 # Deploy to Sepolia testnet
 deploy-sepolia:
-	forge script script/Deploy.s.sol --rpc-url $(RPC_URL) --private-key $(DEPLOYER_PRIVATE_KEY) --broadcast --verify
+	forge script script/Deploy.s.sol --rpc-url $(RPC_URL) --private-key $(DEPLOYER_PRIVATE_KEY) --broadcast --verify --slow
 
 # Deploy to mainnet (be careful!)
 deploy-mainnet:
-	forge script script/Deploy.s.sol --rpc-url $(MAINNET_RPC_URL) --private-key $(DEPLOYER_PRIVATE_KEY) --broadcast --verify
+	forge script script/Deploy.s.sol --rpc-url $(MAINNET_RPC_URL) --private-key $(DEPLOYER_PRIVATE_KEY) --broadcast --verify --slow
 
 # Clean build artifacts
 clean:
