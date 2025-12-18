@@ -1,187 +1,324 @@
-// create campaign page
 "use client";
 
 import { useState, useEffect } from "react";
 import { ethers } from "ethers";
-import donationTokenJson from "@/lib/abi/DonationToken.json";
 import Image from "next/image";
+import abi from "@/lib/abi/DonationToken.json";
 import { CONTRACT_ADDRESS } from "@/lib/addresses";
 
+/* =====================
+   CONFIG
+===================== */
+const USDC_DECIMALS = 6;
+
+const EXPLORER_BY_CHAIN: Record<number, string> = {
+  1: "https://etherscan.io",
+  11155111: "https://sepolia.etherscan.io",
+};
+
+/* =====================
+   TYPES
+===================== */
 interface CampaignFormData {
   title: string;
   description: string;
-  email: string;
+  contact: string; // tetap dikirim ke param `email` di smart contract
   goalAmount: string;
   imageUrl: string;
   startDate: string;
   endDate: string;
 }
 
+/* =====================
+   HELPERS
+===================== */
+const explorerTx = (chainId?: number, hash?: string) => {
+  if (!chainId || !hash) return "#";
+  const base = EXPLORER_BY_CHAIN[chainId];
+  return base ? `${base}/tx/${hash}` : "#";
+};
+
+/* =====================
+   PAGE
+===================== */
 export default function CreateCampaignPage() {
-  const [connectedAddress, setConnectedAddress] = useState<string | null>(null);
+  const [address, setAddress] = useState<string | null>(null);
+  const [chainId, setChainId] = useState<number | null>(null);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
-  const [submitStatus, setSubmitStatus] = useState<{ type: "success" | "error" | null; message: string }>({ type: null, message: "" });
+  const [status, setStatus] = useState<string>("");
 
-  const [formData, setFormData] = useState<CampaignFormData>({
+  const [form, setForm] = useState<CampaignFormData>({
     title: "",
     description: "",
-    email: "",
+    contact: "",
     goalAmount: "",
     imageUrl: "",
     startDate: "",
     endDate: "",
   });
 
-  // Detect Wallet
+  /* =====================
+     WALLET / CHAIN
+  ====================== */
   useEffect(() => {
-    const ethereum = (window as any)?.ethereum;
-    if (!ethereum) return;
+    const eth = (window as any)?.ethereum;
+    if (!eth) return;
 
-    ethereum.request({ method: "eth_accounts" }).then((accounts: string[]) => {
-      if (accounts?.length) setConnectedAddress(accounts[0]);
-    });
+    const onAccounts = (a: string[]) => setAddress(a[0] || null);
+    const onChain = (c: string) => setChainId(parseInt(c, 16));
 
-    ethereum.on?.("accountsChanged", (accounts: string[]) => {
-      setConnectedAddress(accounts?.[0] || null);
-    });
+    eth.on("accountsChanged", onAccounts);
+    eth.on("chainChanged", onChain);
+
+    (async () => {
+      const acc = await eth.request({ method: "eth_accounts" });
+      if (acc?.length) setAddress(acc[0]);
+      const cid = await eth.request({ method: "eth_chainId" });
+      setChainId(parseInt(cid, 16));
+    })();
+
+    return () => {
+      eth.removeListener("accountsChanged", onAccounts);
+      eth.removeListener("chainChanged", onChain);
+    };
   }, []);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  /* =====================
+     HANDLERS
+  ====================== */
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
     const { name, value } = e.target;
 
     if (name === "goalAmount") {
-      const onlyNumbers = value.replace(/[^0-9]/g, "");
-      setFormData((p) => ({ ...p, [name]: onlyNumbers }));
+      setForm((p) => ({ ...p, goalAmount: value.replace(/[^0-9]/g, "") }));
       return;
     }
 
-    setFormData((p) => ({ ...p, [name]: value }));
+    setForm((p) => ({ ...p, [name]: value }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!connectedAddress) {
-      setSubmitStatus({ type: "error", message: "Please connect your wallet first." });
+    if (!address) {
+      setStatus("Please connect wallet first");
       return;
     }
 
-    if (new Date(formData.endDate) <= new Date(formData.startDate)) {
-      setSubmitStatus({ type: "error", message: "End date must be after start date." });
+    const start = new Date(form.startDate).getTime();
+    const end = new Date(form.endDate).getTime();
+
+    if (end <= start) {
+      setStatus("End date must be after start date");
       return;
     }
 
     try {
       setIsSubmitting(true);
-      setSubmitStatus({ type: null, message: "" });
+      setStatus("Submitting transaction...");
       setTxHash(null);
 
-      const ethereum = (window as any).ethereum;
-      const provider = new ethers.BrowserProvider(ethereum);
+      const provider = new ethers.BrowserProvider(
+        (window as any).ethereum
+      );
       const signer = await provider.getSigner();
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, donationTokenJson.abi, signer);
-
-      const goalInUSDC = Number(formData.goalAmount) * 1_000_000;
-      const startTimestamp = Math.floor(new Date(formData.startDate).getTime() / 1000);
-      const endTimestamp = Math.floor(new Date(formData.endDate).getTime() / 1000);
-
-      const tx = await contract.createCampaign(
-        formData.title,
-        formData.description,
-        formData.email,
-        goalInUSDC,
-        formData.imageUrl,
-        startTimestamp,
-        endTimestamp
+      const contract = new ethers.Contract(
+        CONTRACT_ADDRESS,
+        abi.abi,
+        signer
       );
 
-      setSubmitStatus({ type: null, message: "Waiting for transaction confirmation..." });
+      const goal = ethers.parseUnits(form.goalAmount, USDC_DECIMALS);
+      const startTs = Math.floor(start / 1000);
+      const endTs = Math.floor(end / 1000);
+
+      const tx = await contract.createCampaign(
+        form.title,
+        form.description,
+        form.contact, // ⬅ masuk ke param `email` (contact info)
+        goal,
+        form.imageUrl,
+        startTs,
+        endTs
+      );
+
       const receipt = await tx.wait();
 
-      setSubmitStatus({ type: "success", message: "Campaign created successfully!" });
       setTxHash(receipt.hash);
+      setStatus("Campaign created successfully 🎉");
 
-      setFormData({ title: "", description: "", email: "", goalAmount: "", imageUrl: "", startDate: "", endDate: "" });
-    } catch (err: any) {
-      setSubmitStatus({ type: "error", message: err?.reason || err?.message || "Transaction failed" });
+      setForm({
+        title: "",
+        description: "",
+        contact: "",
+        goalAmount: "",
+        imageUrl: "",
+        startDate: "",
+        endDate: "",
+      });
+    } catch (e: any) {
+      setStatus(e?.reason || e?.message || "Transaction failed");
+    } finally {
+      setIsSubmitting(false);
     }
-
-    setIsSubmitting(false);
   };
 
   const inputClass =
     "w-full p-3 rounded-xl bg-white border border-gray-200 shadow-sm focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-200";
 
+  /* =====================
+     RENDER
+  ====================== */
   return (
-    <section className="py-15">
-      <div className="max-w-3xl mx-auto">
-        <div className="bg-white/70 backdrop-blur-md px-10 pb-10 pt-6 rounded-3xl shadow-lg border border-white/40">
+    <section className="py-16">
+      <div className="max-w-3xl mx-auto px-6">
+        <div className="bg-white/80 backdrop-blur-md rounded-3xl shadow-lg p-8">
+          <h1 className="text-3xl font-bold mb-2 text-center">
+            Create Campaign
+          </h1>
+          <p className="text-center text-gray-600 mb-8">
+            Launch your fundraising campaign on-chain
+          </p>
 
-          {/* HEADER */}
-          <div className="mb-8 text-center">
-            <h1 className="text-3xl md:text-4xl font-bold text-gray-800 mb-2">Create Campaign</h1>
-            <p className="text-gray-600">Launch your fundraising campaign on the blockchain</p>
-          </div>
-
-          {/* FORM */}
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* TITLE */}
             <div>
-              <label className="font-semibold text-sm mb-1 block">Campaign Title *</label>
-              <input type="text" name="title" required value={formData.title} onChange={handleChange} className={inputClass} />
+              <label className="text-sm font-semibold">Campaign Title *</label>
+              <input
+                name="title"
+                required
+                value={form.title}
+                onChange={handleChange}
+                className={inputClass}
+              />
             </div>
 
+            {/* DESCRIPTION */}
             <div>
-              <label className="font-semibold text-sm mb-1 block">Description *</label>
-              <textarea name="description" required rows={5} value={formData.description} onChange={handleChange} className={inputClass} />
+              <label className="text-sm font-semibold">Description *</label>
+              <textarea
+                name="description"
+                required
+                rows={5}
+                value={form.description}
+                onChange={handleChange}
+                className={inputClass}
+              />
             </div>
 
+            {/* CONTACT */}
             <div>
-              <label className="font-semibold text-sm mb-1 block">Email *</label>
-              <input type="email" name="email" required value={formData.email} onChange={handleChange} className={inputClass} />
+              <label className="text-sm font-semibold">
+                Contact Info *
+              </label>
+              <input
+                name="contact"
+                required
+                placeholder="email / instagram / linkedin / x (use | or , for multiple)"
+                value={form.contact}
+                onChange={handleChange}
+                className={inputClass}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Example: <br />
+                <span className="italic">
+                  instagram.com/pantijompo | linkedin.com/in/pantijompo
+                </span>
+              </p>
             </div>
 
+            {/* GOAL */}
             <div>
-              <label className="font-semibold text-sm mb-1 block">Goal Amount (USDC) *</label>
-              <input type="number" name="goalAmount" required value={formData.goalAmount} onChange={handleChange} className={inputClass} />
+              <label className="text-sm font-semibold">Goal Amount (USDC) *</label>
+              <input
+                name="goalAmount"
+                required
+                value={form.goalAmount}
+                onChange={handleChange}
+                className={inputClass}
+              />
             </div>
 
+            {/* IMAGE */}
             <div>
-              <label className="font-semibold text-sm mb-1 block">Campaign Image URL</label>
-              <input type="text" name="imageUrl" value={formData.imageUrl} onChange={handleChange} className={inputClass} />
+              <label className="text-sm font-semibold">Image URL</label>
+              <input
+                name="imageUrl"
+                value={form.imageUrl}
+                onChange={handleChange}
+                className={inputClass}
+              />
 
-              {formData.imageUrl && (
-                <div className="relative w-48 h-32 mt-3 rounded-xl border border-gray-200 overflow-hidden">
-                  <Image src={formData.imageUrl} alt="Preview" fill sizes="192px" className="object-cover" />
+              {form.imageUrl && (
+                <div className="relative w-56 h-36 mt-3 rounded-xl overflow-hidden border">
+                  <Image
+                    src={form.imageUrl}
+                    alt="Preview"
+                    fill
+                    className="object-cover"
+                  />
                 </div>
               )}
             </div>
 
+            {/* DATES */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="font-semibold text-sm mb-1 block">Start Date & Time *</label>
-                <input type="datetime-local" name="startDate" required value={formData.startDate} onChange={handleChange} className={inputClass} />
+                <label className="text-sm font-semibold">Start Date *</label>
+                <input
+                  type="datetime-local"
+                  name="startDate"
+                  required
+                  value={form.startDate}
+                  onChange={handleChange}
+                  className={inputClass}
+                />
               </div>
               <div>
-                <label className="font-semibold text-sm mb-1 block">End Date & Time *</label>
-                <input type="datetime-local" name="endDate" required value={formData.endDate} onChange={handleChange} className={inputClass} />
+                <label className="text-sm font-semibold">End Date *</label>
+                <input
+                  type="datetime-local"
+                  name="endDate"
+                  required
+                  value={form.endDate}
+                  onChange={handleChange}
+                  className={inputClass}
+                />
               </div>
             </div>
 
-            {submitStatus.type && (
-              <div className={`p-4 rounded-xl border text-sm ${submitStatus.type === "success" ? "bg-green-100 border-green-300 text-green-700" : "bg-red-100 border-red-300 text-red-700"}`}>
-                {submitStatus.message}
-              </div>
+            {/* STATUS */}
+            {status && (
+              <p className="text-center text-sm text-gray-700">{status}</p>
             )}
 
-            {txHash && (
-              <a href={`https://sepolia.etherscan.io/tx/${txHash}`} target="_blank" className="block text-orange-600 underline text-sm">
-                View Transaction on Etherscan
+            {/* TX LINK */}
+            {txHash && chainId && (
+              <a
+                href={explorerTx(chainId, txHash)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block text-center text-orange-600 underline text-sm"
+              >
+                View Transaction on Explorer
               </a>
             )}
 
-            <button type="submit" disabled={isSubmitting || !connectedAddress} className={`w-full py-3 rounded-xl font-semibold transition ${!connectedAddress ? "bg-gray-400 cursor-not-allowed text-white" : "bg-orange-500 hover:bg-orange-600 text-white"}`}>
-              {!connectedAddress ? "Please Connect Wallet" : isSubmitting ? "Creating..." : "Create Campaign"}
+            {/* SUBMIT */}
+            <button
+              type="submit"
+              disabled={isSubmitting || !address}
+              className="w-full py-3 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-semibold disabled:bg-gray-400"
+            >
+              {!address
+                ? "Connect Wallet"
+                : isSubmitting
+                ? "Creating..."
+                : "Create Campaign"}
             </button>
           </form>
         </div>

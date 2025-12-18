@@ -19,9 +19,41 @@ const NETWORK_USDC: Record<number, string> = {
 /* =====================
    HELPERS
 ===================== */
+function shortContactLabel(text: string) {
+  return text
+    .replace(/^https?:\/\//, "")
+    .replace(/^www\./, "")
+    .slice(0, 28) + (text.length > 28 ? "…" : "");
+}
+
 function shortAddress(addr?: string) {
   if (!addr || addr.length < 10) return "Unknown";
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+}
+
+function parseContacts(raw?: string): string[] {
+  if (!raw) return [];
+  return raw
+    .split(/[|,]/)
+    .map((c) => c.trim())
+    .filter(Boolean);
+}
+
+function contactToLink(contact: string) {
+  if (contact.includes("@") && !contact.startsWith("http")) {
+    return { href: `mailto:${contact}`, label: contact };
+  }
+
+  if (/^\+?\d{9,15}$/.test(contact.replace(/\s/g, ""))) {
+    const num = contact.replace(/\D/g, "");
+    return { href: `https://wa.me/${num}`, label: `WhatsApp ${contact}` };
+  }
+
+  if (!contact.startsWith("http")) {
+    return { href: `https://${contact}`, label: contact };
+  }
+
+  return { href: contact, label: contact };
 }
 
 /* =====================
@@ -196,6 +228,8 @@ export default function DonatePage() {
     );
   }
 
+  const contacts = parseContacts(campaign.email);
+
   const goal = Number(campaign.goal) / 1_000_000;
   const raised = Number(campaign.raised) / 1_000_000;
   const progress = goal === 0 ? 0 : Math.min((raised / goal) * 100, 100);
@@ -223,10 +257,11 @@ export default function DonatePage() {
       <div className="max-w-xl mx-auto bg-white/80 backdrop-blur-md p-5 rounded-3xl shadow-lg">
         <h1 className="text-2xl font-bold mb-1">{campaign.title}</h1>
 
-        {/* CREATOR */}
-        <div className="flex items-center gap-2 text-xs text-gray-500 mb-3">
-          <span>Created by {shortAddress(campaign.creator)}</span>
-
+      {/* CREATOR + CONTACT */}
+      <div className="flex flex-wrap items-center text-xs text-gray-500 gap-x-2 mb-3">
+        {/* Creator */}
+        <span className="flex items-center gap-1">
+          Created by {shortAddress(campaign.creator)}
           <button
             onClick={handleCopy}
             className="text-gray-400 hover:text-gray-700"
@@ -234,7 +269,36 @@ export default function DonatePage() {
           >
             {copied ? "✅" : "📋"}
           </button>
-        </div>
+        </span>
+
+        {/* Separator antara creator dan contacts */}
+        {contacts.length > 0 && <span className="text-gray-400">|</span>}
+
+        {/* Contacts */}
+        {contacts.length > 0 && (
+          <span className="flex flex-wrap items-center gap-x-1">
+            {contacts.map((c, i) => {
+              const link = contactToLink(c);
+              return (
+                <span key={i} className="inline-flex items-center">
+                  <a
+                    href={link.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="!text-blue-600 hover:!text-blue-800 underline"
+                  >
+                    Contact {i + 1}
+                  </a>
+                  {i < contacts.length - 1 && (
+                    <span className="mx-1 text-gray-400">|</span>
+                  )}
+                </span>
+              );
+            })}
+          </span>
+        )}
+      </div>
+
 
         {/* IMAGE */}
         {campaign.image && (
@@ -243,20 +307,17 @@ export default function DonatePage() {
               src={campaign.image}
               alt={campaign.title}
               className="w-full h-full object-cover"
-              onError={(e) => {
-                (e.currentTarget as HTMLImageElement).src =
-                  "https://via.placeholder.com/600x400?text=No+Image";
-              }}
             />
           </div>
         )}
 
         {/* PROGRESS */}
         <div className="mb-4">
-          <div className="flex justify-between text-sm mb-1">
-            <span className="font-semibold">
-              Raised: {raised.toFixed(2)} USDC
-            </span>
+          <div className="flex justify-between items-center text-sm mb-1">
+            <div className="flex gap-4 font-semibold">
+              <span>Raised: {raised.toFixed(2)} USDC</span>
+              <span>Goal: {goal.toFixed(2)} USDC</span>
+            </div>
             <span className="text-gray-500">{progress.toFixed(1)}%</span>
           </div>
 
@@ -267,6 +328,7 @@ export default function DonatePage() {
             />
           </div>
         </div>
+
 
         {/* INPUTS */}
         <input
@@ -290,7 +352,6 @@ export default function DonatePage() {
           disabled={disabled}
         />
 
-        {/* BUTTON */}
         {needsApproval ? (
           <button
             onClick={handleApprove}
