@@ -7,7 +7,7 @@ export default createConfig({
     ethereumSepolia: {
       id: 11155111,
       rpc: process.env.RPC_URL!,
-      ethGetLogsBlockRange: 200,
+      ethGetLogsBlockRange: 1000,
     },
   },
   contracts: {

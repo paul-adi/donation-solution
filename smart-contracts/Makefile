@@ -1,4 +1,4 @@
-.PHONY: build test deploy clean
+.PHONY: build test deploy clean verify
 
 # Build contracts
 build:
@@ -31,6 +31,11 @@ format:
 # Run gas snapshot
 snapshot:
 	forge snapshot
+
+# Verify contract on blockchain explorer
+# Usage: make verify CONTRACT_ADDRESS=<address> CONTRACT_PATH=<path> CHAIN=<chain>
+verify:
+	forge verify-contract --chain $(CHAIN) --etherscan-api-key $(ETHERSCAN_API_KEY) $(CONTRACT_ADDRESS) $(CONTRACT_PATH)
 
 # Load environment variables
 include .env
