@@ -25,19 +25,6 @@ export const DONATION_TOKEN_ABI = [
   },
   {
     type: "function",
-    name: "USDC_DECIMALS",
-    inputs: [],
-    outputs: [
-      {
-        name: "",
-        type: "uint8",
-        internalType: "uint8",
-      },
-    ],
-    stateMutability: "view",
-  },
-  {
-    type: "function",
     name: "campaigns",
     inputs: [
       {
@@ -106,11 +93,6 @@ export const DONATION_TOKEN_ABI = [
         name: "withdrawnTotal",
         type: "uint256",
         internalType: "uint256",
-      },
-      {
-        name: "withdrawReason",
-        type: "string",
-        internalType: "string",
       },
     ],
     stateMutability: "view",
@@ -420,6 +402,12 @@ export const DONATION_TOKEN_ABI = [
         internalType: "string",
       },
       {
+        name: "description",
+        type: "string",
+        indexed: false,
+        internalType: "string",
+      },
+      {
         name: "image",
         type: "string",
         indexed: false,
@@ -673,6 +661,16 @@ export const DONATION_TOKEN_ABI = [
   },
   {
     type: "error",
+    name: "MinimumWithdrawIsOneUSDC",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "MustWithdrawAllRemaining",
+    inputs: [],
+  },
+  {
+    type: "error",
     name: "NoFees",
     inputs: [],
   },
@@ -684,6 +682,11 @@ export const DONATION_TOKEN_ABI = [
   {
     type: "error",
     name: "NotStarted",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "NothingToWithdraw",
     inputs: [],
   },
   {
@@ -732,11 +735,6 @@ export const DONATION_TOKEN_ABI = [
   {
     type: "error",
     name: "TitleRequired",
-    inputs: [],
-  },
-  {
-    type: "error",
-    name: "TransferFailed",
     inputs: [],
   },
   {
