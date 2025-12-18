@@ -187,7 +187,13 @@ export default function DonatePage() {
   };
 
   if (!campaign) {
-    return <p className="text-center mt-10">Loading campaign...</p>;
+    return (
+      <section className="py-16">
+        <p className="text-center mt-32 text-gray-500">
+          Loading campaign...
+        </p>
+      </section>
+    );
   }
 
   const goal = Number(campaign.goal) / 1_000_000;
@@ -213,7 +219,7 @@ export default function DonatePage() {
      RENDER
   ====================== */
   return (
-    <section className="py-12">
+    <section className="py-16">
       <div className="max-w-xl mx-auto bg-white/80 backdrop-blur-md p-5 rounded-3xl shadow-lg">
         <h1 className="text-2xl font-bold mb-1">{campaign.title}</h1>
 
