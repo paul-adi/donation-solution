@@ -105,15 +105,16 @@ export default function DonatePage() {
   /* =====================
      FETCH CAMPAIGN
   ====================== */
-  useEffect(() => {
+  const fetchCampaign = async () => {
     if (!chainId || !Number.isInteger(campaignId)) return;
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    const contract = new ethers.Contract(CONTRACT_ADDRESS, abi.abi, provider);
+    const data = await contract.campaigns(campaignId);
+    setCampaign(data);
+  };
 
-    (async () => {
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, abi.abi, provider);
-      const data = await contract.campaigns(campaignId);
-      setCampaign(data);
-    })();
+  useEffect(() => {
+    fetchCampaign();
   }, [chainId, campaignId]);
 
   /* =====================
@@ -169,6 +170,9 @@ export default function DonatePage() {
 
       setAllowance(ethers.MaxUint256);
       setStatus("USDC approved");
+
+      // Refresh campaign optional
+      await fetchCampaign();
     } catch (e: any) {
       setStatus(e?.reason || e?.message || "Approve failed");
     } finally {
@@ -211,6 +215,9 @@ export default function DonatePage() {
       setAmount("");
       setDonorName("");
       setStatus("Donation successful 🎉");
+
+      // ✅ Refresh campaign to update Raised & Progress
+      await fetchCampaign();
     } catch (e: any) {
       setStatus(e?.reason || e?.message || "Donation failed");
     } finally {
@@ -257,48 +264,44 @@ export default function DonatePage() {
       <div className="max-w-xl mx-auto bg-white/80 backdrop-blur-md p-5 rounded-3xl shadow-lg">
         <h1 className="text-2xl font-bold mb-1">{campaign.title}</h1>
 
-      {/* CREATOR + CONTACT */}
-      <div className="flex flex-wrap items-center text-xs text-gray-500 gap-x-2 mb-3">
-        {/* Creator */}
-        <span className="flex items-center gap-1">
-          Created by {shortAddress(campaign.creator)}
-          <button
-            onClick={handleCopy}
-            className="text-gray-400 hover:text-gray-700"
-            title="Copy creator address"
-          >
-            {copied ? "✅" : "📋"}
-          </button>
-        </span>
-
-        {/* Separator antara creator dan contacts */}
-        {contacts.length > 0 && <span className="text-gray-400">|</span>}
-
-        {/* Contacts */}
-        {contacts.length > 0 && (
-          <span className="flex flex-wrap items-center gap-x-1">
-            {contacts.map((c, i) => {
-              const link = contactToLink(c);
-              return (
-                <span key={i} className="inline-flex items-center">
-                  <a
-                    href={link.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="!text-blue-600 hover:!text-blue-800 underline"
-                  >
-                    Contact {i + 1}
-                  </a>
-                  {i < contacts.length - 1 && (
-                    <span className="mx-1 text-gray-400">|</span>
-                  )}
-                </span>
-              );
-            })}
+        {/* CREATOR + CONTACT */}
+        <div className="flex flex-wrap items-center text-xs text-gray-500 gap-x-2 mb-3">
+          <span className="flex items-center gap-1">
+            Created by {shortAddress(campaign.creator)}
+            <button
+              onClick={handleCopy}
+              className="text-gray-400 hover:text-gray-700"
+              title="Copy creator address"
+            >
+              {copied ? "✅" : "📋"}
+            </button>
           </span>
-        )}
-      </div>
 
+          {contacts.length > 0 && <span className="text-gray-400">|</span>}
+
+          {contacts.length > 0 && (
+            <span className="flex flex-wrap items-center gap-x-1">
+              {contacts.map((c, i) => {
+                const link = contactToLink(c);
+                return (
+                  <span key={i} className="inline-flex items-center">
+                    <a
+                      href={link.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="!text-blue-600 hover:!text-blue-800 underline"
+                    >
+                      Contact {i + 1}
+                    </a>
+                    {i < contacts.length - 1 && (
+                      <span className="mx-1 text-gray-400">|</span>
+                    )}
+                  </span>
+                );
+              })}
+            </span>
+          )}
+        </div>
 
         {/* IMAGE */}
         {campaign.image && (
@@ -328,7 +331,6 @@ export default function DonatePage() {
             />
           </div>
         </div>
-
 
         {/* INPUTS */}
         <input

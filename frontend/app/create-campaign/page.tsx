@@ -224,7 +224,7 @@ export default function CreateCampaignPage() {
                 className={inputClass}
               />
               <p className="text-xs text-gray-500 mt-1">
-                Example: <br />
+                Example:
                 <span className="italic">
                   instagram.com/pantijompo | linkedin.com/in/pantijompo
                 </span>
